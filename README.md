@@ -73,5 +73,33 @@ The **Dotnet Code Review AI Agent** is designed to review small-to-medium .NET e
 - It will not approve changes that introduce security risks.
 - It does not implement code changes by default; it focuses on feedback.
 
+## How to proceed with implementation
+### 1. Define scope and guardrails
+- Set the enhancement threshold (e.g., <20 PD, typical 50–200 LOC) and define out-of-scope items.
+- Decide required review signals (risk score, test guidance, security checks).
+- Document project conventions (.editorconfig, analyzers, naming, API patterns).
+
+### 2. Build the analysis pipeline
+- **Diff intake**: Parse PR diffs and map file changes to solution structure.
+- **Classification**: Tag files as controllers, services, repositories, DTOs, tests.
+- **Rules engine**: Apply .NET-specific checks (async misuse, LINQ pitfalls, null handling).
+- **Context layer**: Compare to existing patterns in the repo (naming, DI usage).
+- **Risk scoring**: Use change size + file type + complexity to derive risk.
+
+### 3. Generate review output
+- Produce a short summary, key findings, and testing guidance.
+- Provide actionable suggestions with file/line references.
+- Keep feedback concise for small changes and more detailed for larger ones.
+
+### 4. Integrate into developer workflow
+- Run in CI on PR creation/update.
+- Post comments to the PR (summary + inline findings).
+- Allow configuration per repo or team (rule toggles, severity thresholds).
+
+### 5. Measure and iterate
+- Track feedback adoption (resolved comments).
+- Tune rules to reduce false positives.
+- Add project-specific checks as patterns emerge.
+
 ---
 **Outcome:** The agent delivers fast, structured, and actionable feedback for small-to-medium .NET enhancements while keeping reviews lightweight and aligned with project standards.
