@@ -150,6 +150,9 @@ def init_db():
         ("viewer", "password123", "readonly_user"),
     ]
     cur.executemany("INSERT OR IGNORE INTO users(username,password_hash,role_id) VALUES(?,?,?)", [(u, hash_pw(p), rmap[r]) for u, p, r in users])
+    # Ensure seeded users always map to intended roles even on existing DBs
+    for uname, pw, role_name in users:
+        cur.execute("UPDATE users SET role_id=?, password_hash=? WHERE username=?", (rmap[role_name], hash_pw(pw), uname))
 
     # Everyone can navigate all functions; category permissions still enforce control visibility scope.
     perms = {k: ["GV", "ID", "PR", "DE", "RS", "RC"] for k in rmap.keys()}
