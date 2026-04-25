@@ -58,8 +58,9 @@ def init_db():
             FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
         );
         CREATE TABLE IF NOT EXISTS functional_groups (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS departments (id INTEGER PRIMARY KEY, department_name TEXT UNIQUE NOT NULL, description TEXT, created_at TEXT, updated_at TEXT);
         CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, access_level INTEGER NOT NULL, functional_group_id INTEGER NOT NULL, FOREIGN KEY(functional_group_id) REFERENCES functional_groups(id));
-        CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role_id INTEGER NOT NULL, FOREIGN KEY(role_id) REFERENCES roles(id));
+        CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role_id INTEGER NOT NULL, department_id INTEGER, FOREIGN KEY(role_id) REFERENCES roles(id), FOREIGN KEY(department_id) REFERENCES departments(id));
         CREATE TABLE IF NOT EXISTS role_category_permissions (role_id INTEGER NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY(role_id, category_id), FOREIGN KEY(role_id) REFERENCES roles(id), FOREIGN KEY(category_id) REFERENCES categories(id));
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY, control_id TEXT NOT NULL, action_type TEXT NOT NULL,
@@ -82,6 +83,11 @@ def init_db():
         """
     )
 
+    # Backward-compatible column migration
+    user_cols = [r[1] for r in cur.execute("PRAGMA table_info(users)").fetchall()]
+    if "department_id" not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN department_id INTEGER")
+
     cur.executemany("INSERT OR IGNORE INTO functions(code,name,description) VALUES(?,?,?)", FUNCTIONS)
     f_map = {r["code"]: r["id"] for r in cur.execute("SELECT id, code FROM functions")}
     cur.executemany("INSERT OR IGNORE INTO categories(code,function_id,name,description) VALUES(?,?,?,?)", [(c, f_map[f], n, d) for c, f, n, d in CATEGORIES])
@@ -102,6 +108,14 @@ def init_db():
     cur.executemany("INSERT OR IGNORE INTO functional_groups(name,description) VALUES(?,?)", groups)
     g_map = {r["name"]: r["id"] for r in cur.execute("SELECT id,name FROM functional_groups")}
 
+    dts = now_iso()
+    departments = [
+        ("Digital Products", "Digital product delivery teams", dts, dts),
+        ("Platform Operations", "Platform and operations teams", dts, dts),
+    ]
+    cur.executemany("INSERT OR IGNORE INTO departments(department_name,description,created_at,updated_at) VALUES(?,?,?,?)", departments)
+    d_map = {r["department_name"]: r["id"] for r in cur.execute("SELECT id, department_name FROM departments")}
+
     roles = [
         ("compliance_officer", 4, g_map["Compliance"]),
         ("risk_officer", 4, g_map["Risk"]),
@@ -121,7 +135,11 @@ def init_db():
     ] + [(f"prodmanager{i}", "password123", "product_manager") for i in range(1, 11)]
     cur.executemany("INSERT OR IGNORE INTO users(username,password_hash,role_id) VALUES(?,?,?)", [(u, hash_pw(p), r_map[r]) for u, p, r in users])
     for uname, pw, role_name in users:
-        cur.execute("UPDATE users SET role_id=?, password_hash=? WHERE username=?", (r_map[role_name], hash_pw(pw), uname))
+        dept_id = None
+        if uname.startswith("prodmanager"):
+            idx = int(uname.replace("prodmanager", ""))
+            dept_id = d_map["Digital Products"] if idx <= 5 else d_map["Platform Operations"]
+        cur.execute("UPDATE users SET role_id=?, password_hash=?, department_id=? WHERE username=?", (r_map[role_name], hash_pw(pw), dept_id, uname))
 
     perms = {k: ["GV", "ID", "PR", "DE", "RS", "RC"] for k in r_map.keys()}
     fcats = {}
@@ -323,6 +341,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Forbidden"}, HTTPStatus.FORBIDDEN)
             q = parse_qs(parsed.query)
             pm_username = q.get("pm_username", [""])[0].strip()
+            department_id = q.get("department_id", [""])[0].strip()
+            pm_usernames = [x for x in q.get("pm_usernames", [""])[0].split(",") if x]
             function_id = q.get("function_id", [""])[0].strip()
             category_code = q.get("category_code", [""])[0].strip()
             subcategory_code = q.get("subcategory_code", [""])[0].strip()
@@ -342,9 +362,16 @@ class Handler(BaseHTTPRequestHandler):
 
             pm_where = "WHERE r.name='product_manager'"
             pm_vals = []
+            if department_id:
+                pm_where += " AND u.department_id=?"
+                pm_vals.append(department_id)
             if pm_username:
                 pm_where += " AND u.username LIKE ?"
                 pm_vals.append(f"%{pm_username}%")
+            if pm_usernames:
+                placeholders = ','.join(['?']*len(pm_usernames))
+                pm_where += f" AND u.username IN ({placeholders})"
+                pm_vals.extend(pm_usernames)
 
             rows = conn.execute(
                 f"""
@@ -414,9 +441,16 @@ class Handler(BaseHTTPRequestHandler):
             # Trend: status updates over time
             trend_where = ["r.name='product_manager'", "pm.last_updated_at IS NOT NULL", where_sql]
             trend_vals = vals.copy()
+            if department_id:
+                trend_where.append("u.department_id=?")
+                trend_vals.append(department_id)
             if pm_username:
                 trend_where.append("u.username LIKE ?")
                 trend_vals.append(f"%{pm_username}%")
+            if pm_usernames:
+                placeholders=','.join(['?']*len(pm_usernames))
+                trend_where.append(f"u.username IN ({placeholders})")
+                trend_vals.extend(pm_usernames)
             if status_filter:
                 trend_where.append("pm.status=?")
                 trend_vals.append(status_filter)
@@ -453,7 +487,13 @@ class Handler(BaseHTTPRequestHandler):
 
             categories = conn.execute("SELECT code, name FROM categories ORDER BY code").fetchall()
             subcategories = conn.execute("SELECT code FROM subcategories ORDER BY code").fetchall()
-            pm_users = conn.execute("SELECT u.username FROM users u JOIN roles r ON r.id=u.role_id WHERE r.name='product_manager' ORDER BY u.username").fetchall()
+            dep_rows = conn.execute("SELECT id, department_name FROM departments ORDER BY department_name").fetchall()
+            pm_opt_where = "WHERE r.name='product_manager'"
+            pm_opt_vals = []
+            if department_id:
+                pm_opt_where += " AND u.department_id=?"
+                pm_opt_vals.append(department_id)
+            pm_users = conn.execute(f"SELECT u.username FROM users u JOIN roles r ON r.id=u.role_id {pm_opt_where} ORDER BY u.username", pm_opt_vals).fetchall()
 
             total_rows = sum(m["total"] for m in managers)
             completion_pct = round((overall["closed"] / total_rows * 100), 2) if total_rows else 0
@@ -473,6 +513,7 @@ class Handler(BaseHTTPRequestHandler):
                 "per_manager": managers,
                 "trend": trend_list,
                 "filter_options": {
+                    "departments": [dict(x) for x in dep_rows],
                     "product_managers": [x["username"] for x in pm_users],
                     "categories": [dict(x) for x in categories],
                     "subcategories": [dict(x) for x in subcategories],
