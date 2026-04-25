@@ -17,7 +17,7 @@ CATEGORIES = [
     ("ID.AM", "ID", "Asset Management", "Assets enabling business purposes are identified and managed"),
     ("ID.RA", "ID", "Risk Assessment", "Cybersecurity risk to organization, assets, and individuals is understood"),
     ("ID.IM", "ID", "Improvement", "Improvements to cybersecurity risk processes are identified across all Functions"),
-    ("PR.AA", "PR", "Identity Management, Authentication, and Access Control", "Access to physical and logical assets is limited and managed"),
+    ("PR.AA", "PR", "Identity Management, Authentication, and Access Control", "Access to physical and logical assets is limited to authorized users, services, and hardware and is managed commensurate with the assessed risk of unauthorized access"),
     ("PR.AT", "PR", "Awareness and Training", "Personnel are provided cybersecurity awareness and training"),
     ("PR.DS", "PR", "Data Security", "Data are managed to protect confidentiality, integrity, and availability"),
     ("PR.PS", "PR", "Platform Security", "Hardware, software, and services are managed consistent with risk strategy"),
