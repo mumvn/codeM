@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NIST CSF 2.0 Explorer</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>NIST Cybersecurity Framework 2.0</h1>
+      <p class="subtitle">Two-level flow: Function Selector → Control View</p>
+    </div>
+    <div id="profile"></div>
+    <button id="logoutBtn" hidden>Logout</button>
+  </header>
+
+  <section id="loginCard" class="card">
+    <h2>Sign in</h2>
+    <div class="form-row">
+      <input id="username" placeholder="username" />
+      <input id="password" type="password" placeholder="password" />
+      <button id="loginBtn">Login</button>
+    </div>
+    <p class="muted">Demo users: alice, ravi, priya, ops1 (password: password123)</p>
+    <p id="loginErr" class="error"></p>
+  </section>
+
+  <main id="main" hidden>
+    <section id="homeView" class="card" hidden>
+      <h2>Choose a CSF Function</h2>
+      <p class="muted">Click a function tile to open its control view.</p>
+      <div id="functionGrid" class="function-grid"></div>
+    </section>
+
+    <section id="controlView" class="card" hidden>
+      <div class="view-head">
+        <button id="backBtn">← Functions</button>
+        <div>
+          <h2 id="selectionTitle">Control View</h2>
+          <p id="selectionDef" class="muted"></p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <select id="categoryFilter"><option value="">All Categories</option></select>
+        <select id="subcategoryFilter"><option value="">All Subcategories</option></select>
+        <input id="controlIdFilter" placeholder="Control ID (e.g., ID.AM-01)" />
+        <input id="search" placeholder="Keywords / search" />
+        <select id="sortBy">
+          <option value="subcategory_code">Sort: Subcategory</option>
+          <option value="category_code">Sort: Category</option>
+          <option value="function_code">Sort: Function</option>
+        </select>
+        <select id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select>
+      </div>
+
+      <table>
+        <thead><tr><th>Function</th><th>Category</th><th>Subcategory</th><th>Definition</th><th>Control</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="pager">
+        <button id="prev">Prev</button>
+        <span id="pageMeta"></span>
+        <button id="next">Next</button>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
