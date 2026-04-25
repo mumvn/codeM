@@ -74,6 +74,15 @@ function renderFunctionCards(functions) {
   });
 }
 
+
+function defCell(text, id) {
+  const limit = 170;
+  const safe = text || '';
+  if (safe.length <= limit) return `<div class="definition-text">${safe}</div>`;
+  const short = safe.slice(0, limit) + '…';
+  return `<div class="definition-text" id="def-${id}" data-full="${safe.replace('"','&quot;')}" data-short="${short.replace('"','&quot;')}">${short}</div><button class="link-btn" data-def-toggle="def-${id}">Show more</button>`;
+}
+
 function fillSelectOptions(selectEl, options, valueKey, labelBuilder, placeholder) {
   const current = selectEl.value;
   selectEl.innerHTML = `<option value="">${placeholder}</option>`;
@@ -113,7 +122,13 @@ async function loadControls() {
       ? `<td><input type="checkbox" data-id="${i.control_id}" ${state.selected.has(i.control_id) ? 'checked' : ''}></td>`
       : '';
     const statusTd = state.canManage ? `<td>${statusBadge(i.status)}</td>` : '';
-    tr.innerHTML = `${checkTd}<td>${i.function_code} — ${i.function_name}</td><td>${i.category_code} — ${i.category_name}</td><td>${i.subcategory_code}</td><td><b>${i.control_id}</b></td><td>${i.control_text}</td>${statusTd}`;
+    tr.innerHTML = `${checkTd}
+      <td><div class="cell-code">${i.function_code}</div><div class="cell-name">${i.function_name}</div></td>
+      <td><div class="cell-code">${i.category_code}</div><div class="cell-name">${i.category_name}</div></td>
+      <td><div class="cell-code">${i.subcategory_code}</div></td>
+      <td><div class="control-id">${i.control_id}</div></td>
+      <td>${defCell(i.control_text, i.id)}</td>
+      ${statusTd}`;
     tbody.appendChild(tr);
   });
 
@@ -125,6 +140,24 @@ async function loadControls() {
       };
     });
   }
+
+  tbody.querySelectorAll('button[data-def-toggle]').forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.getAttribute('data-def-toggle');
+      const el = document.getElementById(id);
+      if (!el) return;
+      const expanded = btn.getAttribute('data-expanded') === '1';
+      if (expanded) {
+        el.textContent = el.getAttribute('data-short');
+        btn.textContent = 'Show more';
+        btn.setAttribute('data-expanded', '0');
+      } else {
+        el.textContent = el.getAttribute('data-full');
+        btn.textContent = 'Show less';
+        btn.setAttribute('data-expanded', '1');
+      }
+    };
+  });
 
   const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
   document.getElementById('pageMeta').textContent = `Page ${state.page}/${maxPage} • ${state.total} rows`;

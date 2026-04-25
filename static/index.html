@@ -74,15 +74,32 @@
         <button id="deprecateBtn">Mark Deprecated</button>
       </div>
 
-      <table>
-        <thead>
-          <tr id="tableHeadRow">
-            <th id="selectHead" hidden>Select</th>
-            <th>Function</th><th>Category</th><th>Subcategory</th><th>Control ID</th><th>Definition</th><th id="statusHead" hidden>Status</th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="control-table">
+          <colgroup>
+            <col class="col-select" />
+            <col class="col-function" />
+            <col class="col-category" />
+            <col class="col-subcategory" />
+            <col class="col-control-id" />
+            <col class="col-definition" />
+            <col class="col-status" />
+          </colgroup>
+          <thead>
+            <tr id="tableHeadRow">
+              <th id="selectHead" hidden>Select</th>
+              <th>Function</th>
+              <th>Category</th>
+              <th>Subcategory</th>
+              <th>Control ID</th>
+              <th>Definition</th>
+              <th id="statusHead" hidden>Status</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
       <div class="pager">
         <button id="prev">Prev</button>
         <span id="pageMeta"></span>
