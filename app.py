@@ -91,6 +91,42 @@ def init_db():
         """
     )
 
+
+    # Backward-compatible migration for older local DBs
+    controls_cols = {row[1] for row in cur.execute("PRAGMA table_info(controls)").fetchall()}
+    expected_controls_cols = {"id", "subcategory_id", "control_code", "control_type", "details"}
+    if controls_cols and controls_cols != expected_controls_cols:
+        cur.executescript(
+            """
+            DROP TABLE IF EXISTS controls;
+            CREATE TABLE controls (
+                id INTEGER PRIMARY KEY,
+                subcategory_id INTEGER,
+                control_code TEXT,
+                control_type TEXT,
+                details TEXT,
+                FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
+            );
+            """
+        )
+
+    subcat_cols = {row[1] for row in cur.execute("PRAGMA table_info(subcategories)").fetchall()}
+    expected_subcat_cols = {"id", "code", "category_id", "name", "definition"}
+    if subcat_cols and subcat_cols != expected_subcat_cols:
+        cur.executescript(
+            """
+            DROP TABLE IF EXISTS subcategories;
+            CREATE TABLE subcategories (
+                id INTEGER PRIMARY KEY,
+                code TEXT UNIQUE,
+                category_id INTEGER,
+                name TEXT,
+                definition TEXT,
+                FOREIGN KEY(category_id) REFERENCES categories(id)
+            );
+            """
+        )
+
     cur.executemany("INSERT OR IGNORE INTO functions(code,name,description) VALUES(?,?,?)", FUNCTIONS)
     function_map = {r["code"]: r["id"] for r in cur.execute("SELECT id, code FROM functions")}
 
