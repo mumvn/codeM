@@ -230,8 +230,14 @@ class Handler(BaseHTTPRequestHandler):
             sort_dir = q.get("sort_dir", ["asc"])[0].upper()
             page = int(q.get("page", [1])[0])
             page_size = min(100, int(q.get("page_size", [12])[0]))
-            if sort_by not in {"control_id", "subcategory_code", "category_code", "function_code", "status"}:
-                sort_by = "control_id"
+            sort_map = {
+                "control_id": "ctrl.control_id",
+                "subcategory_code": "s.code",
+                "category_code": "c.code",
+                "function_code": "f.code",
+                "status": "ctrl.status",
+            }
+            sort_sql = sort_map.get(sort_by, "ctrl.control_id")
             if sort_dir not in {"ASC", "DESC"}:
                 sort_dir = "ASC"
 
@@ -282,7 +288,7 @@ class Handler(BaseHTTPRequestHandler):
                        s.code subcategory_code, s.definition subcategory_definition
                        {pm_cols}
                 {base}
-                ORDER BY {sort_by} {sort_dir}
+                ORDER BY {sort_sql} {sort_dir}
                 LIMIT ? OFFSET ?
                 """,
                 pm_val + vals + [page_size, offset],
