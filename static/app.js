@@ -37,10 +37,23 @@ function statusBadge(status) {
 }
 
 function configureRoleUI() {
-  document.getElementById('managePanel').hidden = !state.canManage;
-  document.getElementById('selectHead').hidden = !state.canManage;
-  document.getElementById('statusHead').hidden = !state.canManage;
-  document.getElementById('statusFilter').hidden = !state.canManage;
+  const managePanel = document.getElementById('managePanel');
+  const selectHead = document.getElementById('selectHead');
+  const statusHead = document.getElementById('statusHead');
+  const statusFilter = document.getElementById('statusFilter');
+  managePanel.hidden = !state.canManage;
+  selectHead.hidden = !state.canManage;
+  statusHead.hidden = !state.canManage;
+  statusFilter.hidden = !state.canManage;
+
+  // Hard-hide manager-only columns and controls for read-only users
+  document.querySelectorAll('.col-select, .col-status').forEach((el) => {
+    el.style.display = state.canManage ? '' : 'none';
+  });
+  if (!state.canManage) {
+    document.getElementById('actionComment').value = '';
+    state.selected.clear();
+  }
 }
 
 function renderFunctionCards(functions) {
@@ -164,6 +177,7 @@ async function loadControls() {
 }
 
 async function runBulk(path) {
+  if (!state.canManage) return;
   if (!state.selected.size) return alert('Select at least one control.');
   await api(path, {
     method: 'POST',
@@ -178,7 +192,7 @@ async function bootstrap() {
   document.getElementById('loginCard').hidden = true;
   document.getElementById('main').hidden = false;
   document.getElementById('logoutBtn').hidden = false;
-  state.canManage = data.can_manage;
+  state.canManage = data.can_manage === true && ["compliance_officer", "risk_officer"].includes(data.me.role_name);
   configureRoleUI();
   document.getElementById('profile').textContent = `${data.me.username} | ${data.me.role_name} | ${data.me.functional_group} | access L${data.me.access_level}`;
   renderFunctionCards(data.functions);
@@ -213,4 +227,5 @@ document.getElementById('deleteBtn').onclick = () => runBulk('/api/controls/soft
 document.getElementById('restoreBtn').onclick = () => runBulk('/api/controls/restore');
 document.getElementById('deprecateBtn').onclick = () => runBulk('/api/controls/deprecate');
 
+configureRoleUI();
 api('/api/bootstrap').then(bootstrap).catch(() => {});
