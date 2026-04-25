@@ -1,19 +1,7 @@
 const state = {
-  functionId: null,
-  functionName: '',
-  functionDef: '',
-  page: 1,
-  pageSize: 12,
-  categoryCode: '',
-  subcategoryCode: '',
-  controlId: '',
-  search: '',
-  status: '',
-  sortBy: 'control_id',
-  sortDir: 'asc',
-  total: 0,
-  canManage: false,
-  selected: new Set(),
+  functionId: null, functionName: '', functionDef: '', page: 1, pageSize: 12,
+  categoryCode: '', subcategoryCode: '', controlId: '', search: '', status: '', sortBy: 'control_id', sortDir: 'asc', total: 0,
+  canManage: false, isProductManager: false, canDashboard: false, selected: new Set(),
 };
 
 async function api(path, opts = {}) {
@@ -23,37 +11,30 @@ async function api(path, opts = {}) {
   return data;
 }
 
-const showHomeView = () => { document.getElementById('homeView').hidden = false; document.getElementById('controlView').hidden = true; };
-const showControlView = () => { document.getElementById('homeView').hidden = true; document.getElementById('controlView').hidden = false; };
+const showView = (id) => ['homeView', 'controlView', 'dashboardView'].forEach((v) => (document.getElementById(v).hidden = v !== id));
 
 function statusBadge(status) {
-  const map = {
-    released: 'Released / Visible to Users',
-    hidden: 'Hidden / Compliance & Risk Only',
-    soft_deleted: 'Soft Deleted',
-    deprecated: 'Deprecated',
-  };
+  const map = { released: 'Released / Visible', hidden: 'Hidden', soft_deleted: 'Soft Deleted', deprecated: 'Deprecated' };
   return `<span class="badge badge-${status}">${map[status] || status}</span>`;
 }
 
-function configureRoleUI() {
-  const managePanel = document.getElementById('managePanel');
-  const selectHead = document.getElementById('selectHead');
-  const statusHead = document.getElementById('statusHead');
-  const statusFilter = document.getElementById('statusFilter');
-  managePanel.hidden = !state.canManage;
-  selectHead.hidden = !state.canManage;
-  statusHead.hidden = !state.canManage;
-  statusFilter.hidden = !state.canManage;
+function pmStatusPill(status) {
+  const s = status || 'open';
+  return `<span class="badge badge-pm-${s}">${s.replace('_', ' ')}</span>`;
+}
 
-  // Hard-hide manager-only columns and controls for read-only users
-  document.querySelectorAll('.col-select, .col-status').forEach((el) => {
-    el.style.display = state.canManage ? '' : 'none';
-  });
-  if (!state.canManage) {
-    document.getElementById('actionComment').value = '';
-    state.selected.clear();
-  }
+function configureRoleUI() {
+  document.querySelectorAll('.col-select, .col-status').forEach((el) => (el.style.display = state.canManage ? '' : 'none'));
+  document.getElementById('managePanel').hidden = !state.canManage;
+  document.getElementById('selectHead').hidden = !state.canManage;
+  document.getElementById('statusHead').hidden = !state.canManage;
+  document.getElementById('statusFilter').hidden = !state.canManage;
+
+  document.querySelectorAll('.col-pm-status, .col-pm-comment').forEach((el) => (el.style.display = state.isProductManager ? '' : 'none'));
+  document.getElementById('pmStatusHead').hidden = !state.isProductManager;
+  document.getElementById('pmCommentHead').hidden = !state.isProductManager;
+
+  document.getElementById('dashboardBtn').hidden = !state.canDashboard;
 }
 
 function renderFunctionCards(functions) {
@@ -68,62 +49,47 @@ function renderFunctionCards(functions) {
       state.functionName = `${fn.name} (${fn.code})`;
       state.functionDef = fn.definition;
       state.page = 1;
-      state.categoryCode = '';
-      state.subcategoryCode = '';
-      state.controlId = '';
-      state.search = '';
-      state.status = '';
+      state.categoryCode = state.subcategoryCode = state.controlId = state.search = state.status = '';
       state.selected.clear();
-      ['categoryFilter', 'subcategoryFilter', 'controlIdFilter', 'search', 'statusFilter'].forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-      });
+      ['categoryFilter', 'subcategoryFilter', 'controlIdFilter', 'search', 'statusFilter'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
       document.getElementById('selectionTitle').textContent = state.functionName;
       document.getElementById('selectionDef').textContent = state.functionDef;
-      showControlView();
+      showView('controlView');
       loadControls();
     };
     grid.appendChild(card);
   });
 }
 
-
-function defCell(text, id) {
-  const limit = 170;
-  const safe = text || '';
-  if (safe.length <= limit) return `<div class="definition-text">${safe}</div>`;
-  const short = safe.slice(0, limit) + '…';
-  return `<div class="definition-text" id="def-${id}" data-full="${safe.replace('"','&quot;')}" data-short="${short.replace('"','&quot;')}">${short}</div><button class="link-btn" data-def-toggle="def-${id}">Show more</button>`;
+function fillSelectOptions(selectEl, options, valueKey, labelBuilder, placeholder) {
+  const curr = selectEl.value;
+  selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+  options.forEach((o) => {
+    const opt = document.createElement('option');
+    opt.value = o[valueKey];
+    opt.textContent = labelBuilder(o);
+    selectEl.appendChild(opt);
+  });
+  if ([...selectEl.options].some((o) => o.value === curr)) selectEl.value = curr;
 }
 
-function fillSelectOptions(selectEl, options, valueKey, labelBuilder, placeholder) {
-  const current = selectEl.value;
-  selectEl.innerHTML = `<option value="">${placeholder}</option>`;
-  options.forEach((opt) => {
-    const o = document.createElement('option');
-    o.value = opt[valueKey];
-    o.textContent = labelBuilder(opt);
-    selectEl.appendChild(o);
-  });
-  if ([...selectEl.options].some((o) => o.value === current)) selectEl.value = current;
+function defCell(text) {
+  if (!text) return '';
+  const lim = 170;
+  return text.length <= lim ? `<div class="definition-text">${text}</div>` : `<div class="definition-text">${text.slice(0, lim)}…</div><span class="muted">(use search to inspect full text)</span>`;
+}
+
+async function updateMyStatus(controlId) {
+  const select = document.getElementById(`pm-stat-${controlId}`);
+  const comment = document.getElementById(`pm-com-${controlId}`);
+  await api('/api/pm/status', { method: 'POST', body: JSON.stringify({ control_id: controlId, status: select.value, status_comment: comment.value }) });
+  await loadControls();
 }
 
 async function loadControls() {
-  const q = new URLSearchParams({
-    function_id: state.functionId,
-    page: state.page,
-    page_size: state.pageSize,
-    category_code: state.categoryCode,
-    subcategory_code: state.subcategoryCode,
-    control_id: state.controlId,
-    search: state.search,
-    status: state.status,
-    sort_by: state.sortBy,
-    sort_dir: state.sortDir,
-  });
+  const q = new URLSearchParams({ function_id: state.functionId, page: state.page, page_size: state.pageSize, category_code: state.categoryCode, subcategory_code: state.subcategoryCode, control_id: state.controlId, search: state.search, status: state.status, sort_by: state.sortBy, sort_dir: state.sortDir });
   const data = await api(`/api/controls?${q.toString()}`);
   state.total = data.total;
-
   fillSelectOptions(document.getElementById('categoryFilter'), data.filter_options.categories, 'code', (c) => `${c.code} — ${c.name}`, 'All Categories');
   fillSelectOptions(document.getElementById('subcategoryFilter'), data.filter_options.subcategories, 'code', (s) => s.code, 'All Subcategories');
 
@@ -131,17 +97,16 @@ async function loadControls() {
   tbody.innerHTML = '';
   data.items.forEach((i) => {
     const tr = document.createElement('tr');
-    const checkTd = state.canManage
-      ? `<td><input type="checkbox" data-id="${i.control_id}" ${state.selected.has(i.control_id) ? 'checked' : ''}></td>`
-      : '';
+    const checkTd = state.canManage ? `<td><input type="checkbox" data-id="${i.control_id}" ${state.selected.has(i.control_id) ? 'checked' : ''}></td>` : '';
     const statusTd = state.canManage ? `<td>${statusBadge(i.status)}</td>` : '';
-    tr.innerHTML = `${checkTd}
-      <td><div class="cell-code">${i.function_code}</div><div class="cell-name">${i.function_name}</div></td>
-      <td><div class="cell-code">${i.category_code}</div><div class="cell-name">${i.category_name}</div></td>
-      <td><div class="cell-code">${i.subcategory_code}</div></td>
-      <td><div class="control-id">${i.control_id}</div></td>
-      <td>${defCell(i.control_text, i.id)}</td>
-      ${statusTd}`;
+    const pmStatusTd = state.isProductManager
+      ? `<td><select id="pm-stat-${i.control_id}"><option value="open" ${(!i.pm_status || i.pm_status === 'open') ? 'selected' : ''}>Open</option><option value="in_progress" ${i.pm_status === 'in_progress' ? 'selected' : ''}>In Progress</option><option value="closed" ${i.pm_status === 'closed' ? 'selected' : ''}>Closed</option></select></td>`
+      : '';
+    const pmCommentTd = state.isProductManager
+      ? `<td><input id="pm-com-${i.control_id}" value="${i.pm_status_comment || ''}" placeholder="comment"/><div class="muted small">${i.pm_last_updated_at || 'Never updated'}</div><button class="link-btn" data-save-pm="${i.control_id}">Save</button></td>`
+      : '';
+
+    tr.innerHTML = `${checkTd}<td><div class="cell-code">${i.function_code}</div><div class="cell-name">${i.function_name}</div></td><td><div class="cell-code">${i.category_code}</div><div class="cell-name">${i.category_name}</div></td><td><div class="cell-code">${i.subcategory_code}</div></td><td><div class="control-id">${i.control_id}</div></td><td>${defCell(i.control_text)}</td>${pmStatusTd}${pmCommentTd}${statusTd}`;
     tbody.appendChild(tr);
   });
 
@@ -153,24 +118,11 @@ async function loadControls() {
       };
     });
   }
-
-  tbody.querySelectorAll('button[data-def-toggle]').forEach((btn) => {
-    btn.onclick = () => {
-      const id = btn.getAttribute('data-def-toggle');
-      const el = document.getElementById(id);
-      if (!el) return;
-      const expanded = btn.getAttribute('data-expanded') === '1';
-      if (expanded) {
-        el.textContent = el.getAttribute('data-short');
-        btn.textContent = 'Show more';
-        btn.setAttribute('data-expanded', '0');
-      } else {
-        el.textContent = el.getAttribute('data-full');
-        btn.textContent = 'Show less';
-        btn.setAttribute('data-expanded', '1');
-      }
-    };
-  });
+  if (state.isProductManager) {
+    tbody.querySelectorAll('button[data-save-pm]').forEach((btn) => {
+      btn.onclick = () => updateMyStatus(btn.getAttribute('data-save-pm'));
+    });
+  }
 
   const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
   document.getElementById('pageMeta').textContent = `Page ${state.page}/${maxPage} • ${state.total} rows`;
@@ -178,13 +130,40 @@ async function loadControls() {
 
 async function runBulk(path) {
   if (!state.canManage) return;
-  if (!state.selected.size) return alert('Select at least one control.');
-  await api(path, {
-    method: 'POST',
-    body: JSON.stringify({ control_ids: Array.from(state.selected), comment: document.getElementById('actionComment').value.trim() }),
-  });
+  if (!state.selected.size) return alert('Select controls first.');
+  await api(path, { method: 'POST', body: JSON.stringify({ control_ids: Array.from(state.selected), comment: document.getElementById('actionComment').value.trim() }) });
   state.selected.clear();
   await loadControls();
+}
+
+async function loadDashboard() {
+  const q = new URLSearchParams({
+    pm_username: document.getElementById('dashPm').value.trim(),
+    function_id: document.getElementById('dashFunction').value,
+    category_code: document.getElementById('dashCategory').value,
+    subcategory_code: document.getElementById('dashSubcategory').value,
+    status: document.getElementById('dashStatus').value,
+  });
+  const data = await api(`/api/dashboard?${q.toString()}`);
+
+  document.getElementById('summaryCards').innerHTML = `
+    <div class='sum-card'><b>Total</b><span>${data.summary.total_rows}</span></div>
+    <div class='sum-card'><b>Open</b><span>${data.summary.overall_open}</span></div>
+    <div class='sum-card'><b>In Progress</b><span>${data.summary.overall_in_progress}</span></div>
+    <div class='sum-card'><b>Closed</b><span>${data.summary.overall_closed}</span></div>`;
+  const total = Math.max(1, data.summary.total_rows);
+  document.getElementById('miniChart').innerHTML = `
+    <div class='bar b-open' style='width:${(data.summary.overall_open/total)*100}%'>Open ${data.summary.overall_open}</div>
+    <div class='bar b-ip' style='width:${(data.summary.overall_in_progress/total)*100}%'>In Progress ${data.summary.overall_in_progress}</div>
+    <div class='bar b-closed' style='width:${(data.summary.overall_closed/total)*100}%'>Closed ${data.summary.overall_closed}</div>`;
+
+  const rows = document.getElementById('dashRows');
+  rows.innerHTML = '';
+  data.per_manager.forEach((m) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${m.product_manager}</td><td>${m.total}</td><td>${m.open}</td><td>${m.in_progress}</td><td>${m.closed}</td><td>${m.completion_pct}%</td><td>${m.overdue_or_stale}</td>`;
+    rows.appendChild(tr);
+  });
 }
 
 async function bootstrap() {
@@ -192,11 +171,15 @@ async function bootstrap() {
   document.getElementById('loginCard').hidden = true;
   document.getElementById('main').hidden = false;
   document.getElementById('logoutBtn').hidden = false;
-  state.canManage = data.can_manage === true && ["compliance_officer", "risk_officer"].includes(data.me.role_name);
+  state.canManage = data.can_manage === true && ['compliance_officer', 'risk_officer'].includes(data.me.role_name);
+  state.isProductManager = data.is_product_manager === true;
+  state.canDashboard = data.can_dashboard === true && state.canManage;
   configureRoleUI();
   document.getElementById('profile').textContent = `${data.me.username} | ${data.me.role_name} | ${data.me.functional_group} | access L${data.me.access_level}`;
   renderFunctionCards(data.functions);
-  showHomeView();
+
+  fillSelectOptions(document.getElementById('dashFunction'), data.functions, 'id', (f) => `${f.code} — ${f.name}`, 'All Functions');
+  showView('homeView');
 }
 
 async function login() {
@@ -208,9 +191,15 @@ async function login() {
   }
 }
 
+// bindings
+
 document.getElementById('loginBtn').onclick = login;
 document.getElementById('logoutBtn').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.reload(); };
-document.getElementById('backBtn').onclick = showHomeView;
+document.getElementById('backBtn').onclick = () => showView('homeView');
+document.getElementById('dashboardBtn').onclick = async () => { showView('dashboardView'); await loadDashboard(); };
+document.getElementById('dashBackBtn').onclick = () => showView('homeView');
+document.getElementById('dashApply').onclick = loadDashboard;
+
 document.getElementById('categoryFilter').onchange = (e) => { state.categoryCode = e.target.value; state.page = 1; loadControls(); };
 document.getElementById('subcategoryFilter').onchange = (e) => { state.subcategoryCode = e.target.value; state.page = 1; loadControls(); };
 document.getElementById('controlIdFilter').oninput = (e) => { state.controlId = e.target.value.trim(); state.page = 1; loadControls(); };
@@ -219,7 +208,7 @@ document.getElementById('statusFilter').onchange = (e) => { state.status = e.tar
 document.getElementById('sortBy').onchange = (e) => { state.sortBy = e.target.value; loadControls(); };
 document.getElementById('sortDir').onchange = (e) => { state.sortDir = e.target.value; loadControls(); };
 document.getElementById('prev').onclick = () => { if (state.page > 1) { state.page -= 1; loadControls(); } };
-document.getElementById('next').onclick = () => { const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize)); if (state.page < maxPage) { state.page += 1; loadControls(); } };
+document.getElementById('next').onclick = () => { const max = Math.max(1, Math.ceil(state.total / state.pageSize)); if (state.page < max) { state.page += 1; loadControls(); } };
 
 document.getElementById('releaseBtn').onclick = () => runBulk('/api/controls/bulk-release');
 document.getElementById('hideBtn').onclick = () => runBulk('/api/controls/bulk-hide');

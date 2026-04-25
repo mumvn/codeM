@@ -11,10 +11,13 @@
   <header>
     <div>
       <h1>NIST Cybersecurity Framework 2.0</h1>
-      <p class="subtitle">Two-level flow: Function Selector → Control View</p>
+      <p class="subtitle">Function Selector → Control View → Admin Dashboard</p>
     </div>
-    <div id="profile"></div>
-    <button id="logoutBtn" hidden>Logout</button>
+    <div class="header-actions">
+      <button id="dashboardBtn" hidden>Admin Dashboard</button>
+      <div id="profile"></div>
+      <button id="logoutBtn" hidden>Logout</button>
+    </div>
   </header>
 
   <section id="loginCard" class="card">
@@ -24,7 +27,7 @@
       <input id="password" type="password" placeholder="password" />
       <button id="loginBtn">Login</button>
     </div>
-    <p class="muted">Demo users: alice, ravi, priya, ops1, viewer (password: password123)</p>
+    <p class="muted">Demo users: alice, ravi, priya, ops1, viewer, prodmanager1-10 (password: password123)</p>
     <p id="loginErr" class="error"></p>
   </section>
 
@@ -83,16 +86,16 @@
             <col class="col-subcategory" />
             <col class="col-control-id" />
             <col class="col-definition" />
+            <col class="col-pm-status" />
+            <col class="col-pm-comment" />
             <col class="col-status" />
           </colgroup>
           <thead>
-            <tr id="tableHeadRow">
+            <tr>
               <th id="selectHead" hidden>Select</th>
-              <th>Function</th>
-              <th>Category</th>
-              <th>Subcategory</th>
-              <th>Control ID</th>
-              <th>Definition</th>
+              <th>Function</th><th>Category</th><th>Subcategory</th><th>Control ID</th><th>Definition</th>
+              <th id="pmStatusHead" hidden>My Status</th>
+              <th id="pmCommentHead" hidden>My Comment / Updated</th>
               <th id="statusHead" hidden>Status</th>
             </tr>
           </thead>
@@ -104,6 +107,29 @@
         <button id="prev">Prev</button>
         <span id="pageMeta"></span>
         <button id="next">Next</button>
+      </div>
+    </section>
+
+    <section id="dashboardView" class="card" hidden>
+      <div class="view-head">
+        <button id="dashBackBtn">← Back</button>
+        <h2>Product Manager Status Dashboard</h2>
+      </div>
+      <div class="toolbar">
+        <input id="dashPm" placeholder="Product manager username" />
+        <select id="dashFunction"><option value="">All Functions</option></select>
+        <select id="dashCategory"><option value="">All Categories</option></select>
+        <select id="dashSubcategory"><option value="">All Subcategories</option></select>
+        <select id="dashStatus"><option value="">All PM Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option><option value="closed">Closed</option></select>
+        <button id="dashApply">Apply Filters</button>
+      </div>
+      <div class="summary-cards" id="summaryCards"></div>
+      <div class="mini-chart" id="miniChart"></div>
+      <div class="table-wrap">
+        <table class="control-table">
+          <thead><tr><th>Product Manager</th><th>Total</th><th>Open</th><th>In Progress</th><th>Closed</th><th>Completion %</th><th>Overdue/Stale</th></tr></thead>
+          <tbody id="dashRows"></tbody>
+        </table>
       </div>
     </section>
   </main>
