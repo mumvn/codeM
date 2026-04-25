@@ -8,9 +8,12 @@ const state = {
   subcategoryCode: '',
   controlId: '',
   search: '',
-  sortBy: 'subcategory_code',
+  status: '',
+  sortBy: 'control_id',
   sortDir: 'asc',
   total: 0,
+  canManage: false,
+  selected: new Set(),
 };
 
 async function api(path, opts = {}) {
@@ -20,19 +23,24 @@ async function api(path, opts = {}) {
   return data;
 }
 
-function showHomeView() {
-  document.getElementById('homeView').hidden = false;
-  document.getElementById('controlView').hidden = true;
+const showHomeView = () => { document.getElementById('homeView').hidden = false; document.getElementById('controlView').hidden = true; };
+const showControlView = () => { document.getElementById('homeView').hidden = true; document.getElementById('controlView').hidden = false; };
+
+function statusBadge(status) {
+  const map = {
+    released: 'Released / Visible to Users',
+    hidden: 'Hidden / Compliance & Risk Only',
+    soft_deleted: 'Soft Deleted',
+    deprecated: 'Deprecated',
+  };
+  return `<span class="badge badge-${status}">${map[status] || status}</span>`;
 }
 
-function showControlView() {
-  document.getElementById('homeView').hidden = true;
-  document.getElementById('controlView').hidden = false;
-}
-
-function setSelection() {
-  document.getElementById('selectionTitle').textContent = `${state.functionName} (${state.functionId ? '' : ''})`.replace(' ()','');
-  document.getElementById('selectionDef').textContent = state.functionDef;
+function configureRoleUI() {
+  document.getElementById('managePanel').hidden = !state.canManage;
+  document.getElementById('selectHead').hidden = !state.canManage;
+  document.getElementById('statusHead').hidden = !state.canManage;
+  document.getElementById('statusFilter').hidden = !state.canManage;
 }
 
 function renderFunctionCards(functions) {
@@ -51,11 +59,14 @@ function renderFunctionCards(functions) {
       state.subcategoryCode = '';
       state.controlId = '';
       state.search = '';
-      document.getElementById('categoryFilter').value = '';
-      document.getElementById('subcategoryFilter').value = '';
-      document.getElementById('controlIdFilter').value = '';
-      document.getElementById('search').value = '';
-      setSelection();
+      state.status = '';
+      state.selected.clear();
+      ['categoryFilter', 'subcategoryFilter', 'controlIdFilter', 'search', 'statusFilter'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('selectionTitle').textContent = state.functionName;
+      document.getElementById('selectionDef').textContent = state.functionDef;
       showControlView();
       loadControls();
     };
@@ -84,10 +95,10 @@ async function loadControls() {
     subcategory_code: state.subcategoryCode,
     control_id: state.controlId,
     search: state.search,
+    status: state.status,
     sort_by: state.sortBy,
     sort_dir: state.sortDir,
   });
-
   const data = await api(`/api/controls?${q.toString()}`);
   state.total = data.total;
 
@@ -98,12 +109,35 @@ async function loadControls() {
   tbody.innerHTML = '';
   data.items.forEach((i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${i.function_code} — ${i.function_name}</td><td>${i.category_code} — ${i.category_name}</td><td><b>${i.subcategory_code}</b></td><td>${i.subcategory_definition}</td><td>${i.control_code} (${i.control_source})</td>`;
+    const checkTd = state.canManage
+      ? `<td><input type="checkbox" data-id="${i.control_id}" ${state.selected.has(i.control_id) ? 'checked' : ''}></td>`
+      : '';
+    const statusTd = state.canManage ? `<td>${statusBadge(i.status)}</td>` : '';
+    tr.innerHTML = `${checkTd}<td>${i.function_code} — ${i.function_name}</td><td>${i.category_code} — ${i.category_name}</td><td>${i.subcategory_code}</td><td><b>${i.control_id}</b></td><td>${i.control_text}</td>${statusTd}`;
     tbody.appendChild(tr);
   });
 
+  if (state.canManage) {
+    tbody.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.onchange = (e) => {
+        const id = e.target.getAttribute('data-id');
+        if (e.target.checked) state.selected.add(id); else state.selected.delete(id);
+      };
+    });
+  }
+
   const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize));
   document.getElementById('pageMeta').textContent = `Page ${state.page}/${maxPage} • ${state.total} rows`;
+}
+
+async function runBulk(path) {
+  if (!state.selected.size) return alert('Select at least one control.');
+  await api(path, {
+    method: 'POST',
+    body: JSON.stringify({ control_ids: Array.from(state.selected), comment: document.getElementById('actionComment').value.trim() }),
+  });
+  state.selected.clear();
+  await loadControls();
 }
 
 async function bootstrap() {
@@ -111,6 +145,8 @@ async function bootstrap() {
   document.getElementById('loginCard').hidden = true;
   document.getElementById('main').hidden = false;
   document.getElementById('logoutBtn').hidden = false;
+  state.canManage = data.can_manage;
+  configureRoleUI();
   document.getElementById('profile').textContent = `${data.me.username} | ${data.me.role_name} | ${data.me.functional_group} | access L${data.me.access_level}`;
   renderFunctionCards(data.functions);
   showHomeView();
@@ -118,10 +154,7 @@ async function bootstrap() {
 
 async function login() {
   try {
-    await api('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({ username: document.getElementById('username').value.trim(), password: document.getElementById('password').value }),
-    });
+    await api('/api/login', { method: 'POST', body: JSON.stringify({ username: document.getElementById('username').value.trim(), password: document.getElementById('password').value }) });
     await bootstrap();
   } catch (e) {
     document.getElementById('loginErr').textContent = e.message;
@@ -135,9 +168,16 @@ document.getElementById('categoryFilter').onchange = (e) => { state.categoryCode
 document.getElementById('subcategoryFilter').onchange = (e) => { state.subcategoryCode = e.target.value; state.page = 1; loadControls(); };
 document.getElementById('controlIdFilter').oninput = (e) => { state.controlId = e.target.value.trim(); state.page = 1; loadControls(); };
 document.getElementById('search').oninput = (e) => { state.search = e.target.value; state.page = 1; loadControls(); };
+document.getElementById('statusFilter').onchange = (e) => { state.status = e.target.value; state.page = 1; loadControls(); };
 document.getElementById('sortBy').onchange = (e) => { state.sortBy = e.target.value; loadControls(); };
 document.getElementById('sortDir').onchange = (e) => { state.sortDir = e.target.value; loadControls(); };
 document.getElementById('prev').onclick = () => { if (state.page > 1) { state.page -= 1; loadControls(); } };
 document.getElementById('next').onclick = () => { const maxPage = Math.max(1, Math.ceil(state.total / state.pageSize)); if (state.page < maxPage) { state.page += 1; loadControls(); } };
+
+document.getElementById('releaseBtn').onclick = () => runBulk('/api/controls/bulk-release');
+document.getElementById('hideBtn').onclick = () => runBulk('/api/controls/bulk-hide');
+document.getElementById('deleteBtn').onclick = () => runBulk('/api/controls/soft-delete');
+document.getElementById('restoreBtn').onclick = () => runBulk('/api/controls/restore');
+document.getElementById('deprecateBtn').onclick = () => runBulk('/api/controls/deprecate');
 
 api('/api/bootstrap').then(bootstrap).catch(() => {});

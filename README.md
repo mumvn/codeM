@@ -1,31 +1,38 @@
-# NIST CSF 2.0 Explorer (Two-Level Interaction Model)
+# NIST CSF 2.0 Explorer (Lifecycle + Visibility Controls)
 
-## Feasibility Confirmation
-Implemented as requested with a strict two-level UX:
-1. **Homepage**: function selector only (GV, ID, PR, DE, RS, RC).
-2. **Control View**: table + filters (no tree rendering).
+## Access Model
+- **All users** can access and click all six NIST CSF functions on the homepage.
+- **Compliance Officer** and **Risk Officer**:
+  - Full visibility of all controls (released, hidden, soft-deleted, deprecated)
+  - Can create/edit/release/hide/soft-delete/restore/deprecate controls
+  - Can view audit history
+- **IT Product Manager**, **Technical Operations**, and **Read-only** users:
+  - Read-only access
+  - See only released + visible + not-soft-deleted controls
 
-## Data Model (Normalized)
-- `functions(id, code, name, description)`
-- `categories(id, code, function_id, name, description)`
-- `subcategories(id, code, category_id, definition)`
-- `functional_groups(id, name, description)`
-- `roles(id, name, access_level, functional_group_id)`
-- `users(id, username, password_hash, role_id)`
-- `role_category_permissions(role_id, category_id)`
+## Schema Highlights
+- `functions`, `categories`, `subcategories`
+- `controls` with lifecycle/visibility fields:
+  - `status`
+  - `is_visible_to_general_users`
+  - `is_soft_deleted`
+  - `created_by`, `updated_by`, `created_at`, `updated_at`
+- `users`, `roles`, `functional_groups`, `role_category_permissions`
+- `audit_log` for lifecycle actions
 
-Notes:
-- Control rows are derived from `subcategories` (control ID = subcategory code), avoiding duplicated storage.
-- RBAC continues to restrict visibility by role/category permissions.
-
-## Updated UI Flow
-1. Login
-2. Homepage shows only function cards with definitions
-3. Click function card
-4. Control view opens dynamically (no reload)
-5. Table supports filters: Category, Subcategory, Control ID, Keywords
-6. Sorting + pagination supported
-7. Back button returns to homepage function selector
+## APIs
+- `POST /api/login`, `POST /api/logout`
+- `GET /api/bootstrap`
+- `GET /api/controls` (role-aware data visibility)
+- Manager-only:
+  - `POST /api/controls/create`
+  - `POST /api/controls/edit`
+  - `POST /api/controls/bulk-release`
+  - `POST /api/controls/bulk-hide`
+  - `POST /api/controls/soft-delete`
+  - `POST /api/controls/restore`
+  - `POST /api/controls/deprecate`
+  - `GET /api/audit`
 
 ## Run
 ```bash
@@ -33,8 +40,9 @@ python app.py
 ```
 Open: `http://localhost:8000`
 
-Demo accounts:
-- `alice` / `password123`
-- `ravi` / `password123`
-- `priya` / `password123`
-- `ops1` / `password123`
+Demo users (`password123`):
+- `alice` (compliance_officer)
+- `ravi` (risk_officer)
+- `priya` (product_manager)
+- `ops1` (tech_ops)
+- `viewer` (readonly_user)

@@ -24,14 +24,14 @@
       <input id="password" type="password" placeholder="password" />
       <button id="loginBtn">Login</button>
     </div>
-    <p class="muted">Demo users: alice, ravi, priya, ops1 (password: password123)</p>
+    <p class="muted">Demo users: alice, ravi, priya, ops1, viewer (password: password123)</p>
     <p id="loginErr" class="error"></p>
   </section>
 
   <main id="main" hidden>
     <section id="homeView" class="card" hidden>
       <h2>Choose a CSF Function</h2>
-      <p class="muted">Click a function tile to open its control view.</p>
+      <p class="muted">All users can access all six NIST CSF functions.</p>
       <div id="functionGrid" class="function-grid"></div>
     </section>
 
@@ -47,18 +47,40 @@
       <div class="toolbar">
         <select id="categoryFilter"><option value="">All Categories</option></select>
         <select id="subcategoryFilter"><option value="">All Subcategories</option></select>
-        <input id="controlIdFilter" placeholder="Control ID (e.g., ID.AM-01)" />
+        <input id="controlIdFilter" placeholder="Control ID" />
         <input id="search" placeholder="Keywords / search" />
+        <select id="statusFilter" hidden>
+          <option value="">All Statuses</option>
+          <option value="released">Released</option>
+          <option value="hidden">Hidden</option>
+          <option value="soft_deleted">Soft Deleted</option>
+          <option value="deprecated">Deprecated</option>
+        </select>
         <select id="sortBy">
+          <option value="control_id">Sort: Control ID</option>
           <option value="subcategory_code">Sort: Subcategory</option>
           <option value="category_code">Sort: Category</option>
-          <option value="function_code">Sort: Function</option>
+          <option value="status">Sort: Status</option>
         </select>
         <select id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select>
       </div>
 
+      <div id="managePanel" class="manage-panel" hidden>
+        <input id="actionComment" placeholder="Optional reason/comment" />
+        <button id="releaseBtn">Release Selected Controls</button>
+        <button id="hideBtn">Remove Selected Controls from Visibility</button>
+        <button id="deleteBtn">Soft Delete</button>
+        <button id="restoreBtn">Restore</button>
+        <button id="deprecateBtn">Mark Deprecated</button>
+      </div>
+
       <table>
-        <thead><tr><th>Function</th><th>Category</th><th>Subcategory</th><th>Definition</th><th>Control</th></tr></thead>
+        <thead>
+          <tr id="tableHeadRow">
+            <th id="selectHead" hidden>Select</th>
+            <th>Function</th><th>Category</th><th>Subcategory</th><th>Control ID</th><th>Definition</th><th id="statusHead" hidden>Status</th>
+          </tr>
+        </thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="pager">

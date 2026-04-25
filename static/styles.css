@@ -8,6 +8,9 @@ button{cursor:pointer}button:hover{border-color:var(--accent)}.error{color:#fda4
 .function-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:12px}
 .function-card{text-align:left;padding:16px;background:linear-gradient(140deg,#0a1733,#081226);border:1px solid #2b456f;min-height:130px}
 .function-card:hover{transform:translateY(-2px);transition:.2s;border-color:var(--accent)}.function-code{color:var(--accent);font-weight:700;font-size:1.1rem;margin-bottom:8px}.function-def{color:#cbd5e1;line-height:1.35}
-.view-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.toolbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px}
+.view-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}.toolbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:8px}
+.manage-panel{display:grid;grid-template-columns:2fr repeat(5,minmax(120px,1fr));gap:8px;margin:8px 0}
 table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #2c4470;text-align:left;vertical-align:top}th{color:#93c5fd}
 .pager{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding-top:10px;color:var(--muted)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.8rem;border:1px solid}
+.badge-released{color:#86efac;border-color:#22c55e}.badge-hidden{color:#facc15;border-color:#eab308}.badge-soft_deleted{color:#fda4af;border-color:#fb7185}.badge-deprecated{color:#c4b5fd;border-color:#8b5cf6}
