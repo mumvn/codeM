@@ -102,7 +102,6 @@
           <tbody id="rows"></tbody>
         </table>
       </div>
-
       <div class="pager">
         <button id="prev">Prev</button>
         <span id="pageMeta"></span>
@@ -121,10 +120,21 @@
         <select id="dashCategory"><option value="">All Categories</option></select>
         <select id="dashSubcategory"><option value="">All Subcategories</option></select>
         <select id="dashStatus"><option value="">All PM Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option><option value="closed">Closed</option></select>
+        <input id="dashStart" type="date" />
+        <input id="dashEnd" type="date" />
         <button id="dashApply">Apply Filters</button>
+        <button id="dashReset">Reset Filters</button>
       </div>
       <div class="summary-cards" id="summaryCards"></div>
-      <div class="mini-chart" id="miniChart"></div>
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Status Distribution</h3><canvas id="statusPie"></canvas></div>
+        <div class="chart-card"><h3>PM Status Breakdown</h3><canvas id="pmBar"></canvas></div>
+        <div class="chart-card"><h3>Status Trend</h3><canvas id="trendLine"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Progress Timeline (Gantt-style)</h3>
+        <div id="timelineRows"></div>
+      </div>
       <div class="table-wrap">
         <table class="control-table">
           <thead><tr><th>Product Manager</th><th>Total</th><th>Open</th><th>In Progress</th><th>Closed</th><th>Completion %</th><th>Overdue/Stale</th></tr></thead>
@@ -134,6 +144,7 @@
     </section>
   </main>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

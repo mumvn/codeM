@@ -327,6 +327,8 @@ class Handler(BaseHTTPRequestHandler):
             category_code = q.get("category_code", [""])[0].strip()
             subcategory_code = q.get("subcategory_code", [""])[0].strip()
             status_filter = q.get("status", [""])[0].strip()
+            start_date = q.get("start_date", [""])[0].strip()
+            end_date = q.get("end_date", [""])[0].strip()
 
             where = ["ctrl.status='released'", "ctrl.is_visible_to_general_users=1", "ctrl.is_soft_deleted=0"]
             vals = []
@@ -368,12 +370,26 @@ class Handler(BaseHTTPRequestHandler):
                 pm_vals + vals,
             ).fetchall()
 
+            def in_date(last_updated):
+                if not start_date and not end_date:
+                    return True
+                if not last_updated:
+                    return False
+                d = last_updated[:10]
+                if start_date and d < start_date:
+                    return False
+                if end_date and d > end_date:
+                    return False
+                return True
+
             per = {}
             overall = {"open": 0, "in_progress": 0, "closed": 0}
             overdue_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
             for r in rows:
                 status = r["pm_status"]
                 if status_filter and status != status_filter:
+                    continue
+                if not in_date(r["last_updated_at"]):
                     continue
                 pm = per.setdefault(r["pm_username"], {"product_manager": r["pm_username"], "total": 0, "open": 0, "in_progress": 0, "closed": 0, "overdue_or_stale": 0})
                 pm["total"] += 1
@@ -395,14 +411,72 @@ class Handler(BaseHTTPRequestHandler):
                 managers.append(x)
             managers.sort(key=lambda m: m["product_manager"])
 
+            # Trend: status updates over time
+            trend_where = ["r.name='product_manager'", "pm.last_updated_at IS NOT NULL", where_sql]
+            trend_vals = vals.copy()
+            if pm_username:
+                trend_where.append("u.username LIKE ?")
+                trend_vals.append(f"%{pm_username}%")
+            if status_filter:
+                trend_where.append("pm.status=?")
+                trend_vals.append(status_filter)
+            if start_date:
+                trend_where.append("substr(pm.last_updated_at,1,10) >= ?")
+                trend_vals.append(start_date)
+            if end_date:
+                trend_where.append("substr(pm.last_updated_at,1,10) <= ?")
+                trend_vals.append(end_date)
+
+            trend_rows = conn.execute(
+                f"""
+                SELECT substr(pm.last_updated_at,1,10) as day, pm.status, count(*) as cnt
+                FROM product_manager_control_status pm
+                JOIN users u ON u.id=pm.product_manager_user_id
+                JOIN roles r ON r.id=u.role_id
+                JOIN controls ctrl ON ctrl.control_id=pm.control_id
+                JOIN subcategories s ON s.id=ctrl.subcategory_id
+                JOIN categories c ON c.id=s.category_id
+                JOIN functions f ON f.id=c.function_id
+                WHERE {' AND '.join(trend_where)}
+                GROUP BY day, pm.status
+                ORDER BY day
+                """,
+                trend_vals,
+            ).fetchall()
+
+            trend = {}
+            for tr in trend_rows:
+                d = trend.setdefault(tr["day"], {"date": tr["day"], "open": 0, "in_progress": 0, "closed": 0, "updates": 0})
+                d[tr["status"]] += tr["cnt"]
+                d["updates"] += tr["cnt"]
+            trend_list = [trend[k] for k in sorted(trend.keys())]
+
+            categories = conn.execute("SELECT code, name FROM categories ORDER BY code").fetchall()
+            subcategories = conn.execute("SELECT code FROM subcategories ORDER BY code").fetchall()
+            pm_users = conn.execute("SELECT u.username FROM users u JOIN roles r ON r.id=u.role_id WHERE r.name='product_manager' ORDER BY u.username").fetchall()
+
+            total_rows = sum(m["total"] for m in managers)
+            completion_pct = round((overall["closed"] / total_rows * 100), 2) if total_rows else 0
+            stale_total = sum(m["overdue_or_stale"] for m in managers)
+
             return self._json({
                 "summary": {
-                    "total_rows": sum(m["total"] for m in managers),
+                    "total_controls": total_rows,
+                    "total_product_managers": len(managers),
                     "overall_open": overall["open"],
                     "overall_in_progress": overall["in_progress"],
                     "overall_closed": overall["closed"],
+                    "overall_completion_pct": completion_pct,
+                    "stale_controls": stale_total,
                 },
+                "status_distribution": overall,
                 "per_manager": managers,
+                "trend": trend_list,
+                "filter_options": {
+                    "product_managers": [x["username"] for x in pm_users],
+                    "categories": [dict(x) for x in categories],
+                    "subcategories": [dict(x) for x in subcategories],
+                },
             })
 
         if parsed.path == "/api/audit":

@@ -33,3 +33,9 @@ Demo password: `password123`
 - Product managers: `priya`, `prodmanager1`..`prodmanager10`
 - Tech ops: `ops1`
 - Read-only: `viewer`
+
+
+## Dashboard UI
+- Interactive charts (Chart.js): donut status distribution, PM stacked bars, trend line.
+- Clickable KPI/cards and chart elements drive dashboard filters.
+- Includes a Gantt-style completion timeline per Product Manager.
