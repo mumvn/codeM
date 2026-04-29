@@ -563,6 +563,8 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         if parsed.path == "/api/regulations/ai-dora":
+            if not can_manage(ctx):
+                return self._json({"error": "Forbidden"}, HTTPStatus.FORBIDDEN)
             q = parse_qs(parsed.query)
             article = q.get("article", [""])[0].strip()
             domain = q.get("domain", [""])[0].strip()
