@@ -19,6 +19,7 @@
 - Controls: `GET /api/controls`
 - PM status update: `POST /api/pm/status` (product_manager only)
 - Dashboard: `GET /api/dashboard` (compliance/risk only)
+- AI/DORA regulation module: `GET /api/regulations/ai-dora`, `POST /api/regulations/ai-dora/status`
 - Existing manager lifecycle APIs retained (`/api/controls/*`)
 
 ## Run
@@ -26,6 +27,7 @@
 python app.py
 ```
 Open: `http://localhost:8000`
+AI/DORA page: `http://localhost:8000/ai-dora-regulation`
 
 Demo password: `password123`
 - Compliance: `alice`
@@ -39,3 +41,13 @@ Demo password: `password123`
 - Interactive charts (Chart.js): donut status distribution, PM stacked bars, trend line.
 - Clickable KPI/cards and chart elements drive dashboard filters.
 - Includes a Gantt-style completion timeline per Product Manager.
+
+## AI / DORA Regulation module
+- New navigation entry: **AI / DORA Regulation** (manager roles).
+- Adds an integrated compliance page with:
+  - total extracted requirements,
+  - domain/status summaries,
+  - filters by article, domain, status, responsible party, and risk impact,
+  - requirement table with source excerpts, evidence expectations, and implementation notes,
+  - status/comment workflow for compliance/risk reviewers.
+- Seed requirements are generated using reusable extraction/mapping helpers in `data/eu_regulation_seed.py`.

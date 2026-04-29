@@ -15,6 +15,7 @@
     </div>
     <div class="header-actions">
       <button id="dashboardBtn" hidden>Admin Dashboard</button>
+      <button id="regulationBtn" hidden>AI / DORA Regulation</button>
       <div id="profile"></div>
       <button id="logoutBtn" hidden>Logout</button>
     </div>
@@ -139,6 +140,30 @@
         <table class="control-table">
           <thead><tr><th>Product Manager</th><th>Total</th><th>Open</th><th>In Progress</th><th>Closed</th><th>Completion %</th><th>Overdue/Stale</th></tr></thead>
           <tbody id="dashRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="regulationView" class="card" hidden>
+      <div class="view-head">
+        <button id="regBackBtn">← Back</button>
+        <h2>AI / DORA Regulation</h2>
+      </div>
+      <p id="regMeta" class="muted"></p>
+      <div class="toolbar">
+        <input id="regSearch" placeholder="Search requirements" />
+        <select id="regArticle"><option value="">All Articles</option></select>
+        <select id="regDomain"><option value="">All Domains</option></select>
+        <select id="regStatus"><option value="">All Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option><option value="closed">Closed</option></select>
+        <input id="regResponsible" placeholder="Responsible party" />
+        <select id="regRisk"><option value="">All Risks</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        <button id="regApply">Apply</button>
+      </div>
+      <div class="summary-cards" id="regSummary"></div>
+      <div class="table-wrap">
+        <table class="control-table">
+          <thead><tr><th>Req ID</th><th>Article</th><th>Domain</th><th>Title</th><th>Responsible</th><th>Risk</th><th>Status</th><th>Evidence / Notes</th></tr></thead>
+          <tbody id="regRows"></tbody>
         </table>
       </div>
     </section>

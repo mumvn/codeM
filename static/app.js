@@ -2,7 +2,7 @@ const state = { functionId:null,functionName:'',functionDef:'',page:1,pageSize:1
 const charts = { pie:null, bar:null, trend:null };
 
 async function api(path, opts={}) { const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'include',...opts}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
-const showView=id=>['homeView','controlView','dashboardView'].forEach(v=>document.getElementById(v).hidden=v!==id);
+const showView=id=>['homeView','controlView','dashboardView','regulationView'].forEach(v=>document.getElementById(v).hidden=v!==id);
 
 function statusBadge(s){const m={released:'Released / Visible',hidden:'Hidden',soft_deleted:'Soft Deleted',deprecated:'Deprecated'};return `<span class="badge badge-${s}">${m[s]||s}</span>`}
 function configureRoleUI(){
@@ -15,6 +15,7 @@ function configureRoleUI(){
   document.getElementById('pmStatusHead').hidden=!state.isProductManager;
   document.getElementById('pmCommentHead').hidden=!state.isProductManager;
   document.getElementById('dashboardBtn').hidden=!state.canDashboard;
+  document.getElementById('regulationBtn').hidden=!state.canManage;
 }
 
 function fillSelectOptions(el, options, key, label, placeholder){const curr=el.value; el.innerHTML=`<option value="">${placeholder}</option>`; options.forEach(o=>{const op=document.createElement('option'); op.value=o[key]; op.textContent=label(o); el.appendChild(op)}); if([...el.options].some(o=>o.value===curr)) el.value=curr;}
@@ -80,6 +81,20 @@ async function loadDashboard(){
 
 function resetDashboardFilters(){ ['dashPm','dashFunction','dashCategory','dashSubcategory','dashStatus','dashStart','dashEnd'].forEach(id=>document.getElementById(id).value=''); loadDashboard(); }
 
+async function loadRegulation(){
+  const q=new URLSearchParams({search:document.getElementById('regSearch').value.trim(),article:document.getElementById('regArticle').value,domain:document.getElementById('regDomain').value,status:document.getElementById('regStatus').value,responsible_party:document.getElementById('regResponsible').value.trim(),risk_impact:document.getElementById('regRisk').value});
+  const data=await api(`/api/regulations/ai-dora?${q.toString()}`);
+  document.getElementById('regMeta').innerHTML=`${data.regulation_name} · <a href="${data.source_url}" target="_blank">Source</a>`;
+  fillSelectOptions(document.getElementById('regArticle'), data.filter_options.articles.map(a=>({v:a})), 'v', x=>x.v, 'All Articles');
+  fillSelectOptions(document.getElementById('regDomain'), data.filter_options.domains.map(d=>({v:d})), 'v', x=>x.v, 'All Domains');
+  const s=data.summary;
+  document.getElementById('regSummary').innerHTML=`<div class='sum-card'><b>Total requirements</b><span>${s.total_requirements}</span></div>
+  <div class='sum-card'><b>Open</b><span>${s.by_status.open}</span></div><div class='sum-card'><b>In Progress</b><span>${s.by_status.in_progress}</span></div><div class='sum-card'><b>Closed</b><span>${s.by_status.closed}</span></div>`;
+  const rows=document.getElementById('regRows'); rows.innerHTML='';
+  data.items.forEach(r=>{const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.requirement_id}</td><td>${r.article_reference}</td><td>${r.control_domain}</td><td><b>${r.requirement_title}</b><div class='muted small'>${r.requirement_summary}</div><div class='muted small'>${r.source_excerpt}</div></td><td>${r.responsible_party||''}</td><td>${r.risk_impact||''}</td><td><select data-rid="${r.requirement_id}" data-comments-id="c-${r.requirement_id}"><option value="open" ${r.status==='open'?'selected':''}>Open</option><option value="in_progress" ${r.status==='in_progress'?'selected':''}>In Progress</option><option value="closed" ${r.status==='closed'?'selected':''}>Closed</option></select></td><td>${r.evidence_required||''}<textarea id="c-${r.requirement_id}" placeholder="comments">${r.comments||''}</textarea><button class="link-btn" data-save-reg="${r.requirement_id}">Save</button></td>`; rows.appendChild(tr);});
+  rows.querySelectorAll('button[data-save-reg]').forEach(btn=>btn.onclick=async()=>{const rid=btn.getAttribute('data-save-reg');const sel=rows.querySelector(`select[data-rid="${rid}"]`);const comments=document.getElementById(`c-${rid}`).value;await api('/api/regulations/ai-dora/status',{method:'POST',body:JSON.stringify({requirement_id:rid,status:sel.value,comments})});await loadRegulation();});
+}
+
 async function bootstrap(){
   const data=await api('/api/bootstrap');
   document.getElementById('loginCard').hidden=true; document.getElementById('main').hidden=false; document.getElementById('logoutBtn').hidden=false;
@@ -90,7 +105,11 @@ async function bootstrap(){
   document.getElementById('profile').textContent=`${data.me.username} | ${data.me.role_name} | ${data.me.functional_group} | access L${data.me.access_level}`;
   renderFunctionCards(data.functions);
   fillSelectOptions(document.getElementById('dashFunction'), data.functions, 'id', f=>`${f.code} — ${f.name}`, 'All Functions');
-  showView('homeView');
+  if (location.pathname.includes('ai-dora-regulation') || location.pathname.includes('/regulations/eu-ai-dora')) {
+    showView('regulationView'); loadRegulation();
+  } else {
+    showView('homeView');
+  }
 }
 
 async function login(){ try{ await api('/api/login',{method:'POST',body:JSON.stringify({username:document.getElementById('username').value.trim(),password:document.getElementById('password').value})}); await bootstrap(); }catch(e){ document.getElementById('loginErr').textContent=e.message; } }
@@ -104,6 +123,9 @@ document.getElementById('dashboardBtn').onclick=async()=>{showView('dashboardVie
 document.getElementById('dashBackBtn').onclick=()=>showView('homeView');
 document.getElementById('dashApply').onclick=loadDashboard;
 document.getElementById('dashReset').onclick=resetDashboardFilters;
+document.getElementById('regulationBtn').onclick=async()=>{showView('regulationView');await loadRegulation();};
+document.getElementById('regBackBtn').onclick=()=>showView('homeView');
+document.getElementById('regApply').onclick=loadRegulation;
 
 document.getElementById('categoryFilter').onchange=e=>{state.categoryCode=e.target.value;state.page=1;loadControls();};
 document.getElementById('subcategoryFilter').onchange=e=>{state.subcategoryCode=e.target.value;state.page=1;loadControls();};

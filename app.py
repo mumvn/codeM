@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from data.csf_seed import CATEGORIES, CONTROLS, FUNCTIONS
+from data.eu_regulation_seed import REGULATION_NAME, SOURCE_URL, build_seed_requirements
 
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "csf.db"
@@ -79,6 +80,29 @@ def init_db():
             updated_at TEXT NOT NULL,
             UNIQUE(product_manager_user_id, control_id),
             FOREIGN KEY(product_manager_user_id) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS regulation_requirements (
+            id INTEGER PRIMARY KEY,
+            requirement_id TEXT UNIQUE NOT NULL,
+            regulation_name TEXT NOT NULL,
+            article_reference TEXT NOT NULL,
+            requirement_title TEXT NOT NULL,
+            requirement_summary TEXT NOT NULL,
+            source_excerpt TEXT NOT NULL,
+            source_url TEXT NOT NULL,
+            responsible_party TEXT,
+            compliance_objective TEXT,
+            control_domain TEXT,
+            evidence_required TEXT,
+            implementation_guidance TEXT,
+            deadline_or_frequency TEXT,
+            risk_impact TEXT,
+            status TEXT NOT NULL DEFAULT 'open',
+            reviewer_role TEXT,
+            approver_role TEXT,
+            comments TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
         );
         """
     )
@@ -151,6 +175,22 @@ def init_db():
             for cid in fcats.get(fn, []):
                 rows.append((r_map[role], cid))
     cur.executemany("INSERT OR IGNORE INTO role_category_permissions(role_id,category_id) VALUES(?,?)", rows)
+    rts = now_iso()
+    for req in build_seed_requirements():
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO regulation_requirements(
+                requirement_id,regulation_name,article_reference,requirement_title,requirement_summary,source_excerpt,source_url,
+                responsible_party,compliance_objective,control_domain,evidence_required,implementation_guidance,deadline_or_frequency,
+                risk_impact,status,reviewer_role,approver_role,comments,created_at,updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                req["requirement_id"], req["regulation_name"], req["article_reference"], req["requirement_title"], req["requirement_summary"], req["source_excerpt"], SOURCE_URL,
+                req["responsible_party"], req["compliance_objective"], req["control_domain"], req["evidence_required"], req["implementation_guidance"], req["deadline_or_frequency"],
+                req["risk_impact"], req["status"], req["reviewer_role"], req["approver_role"], req["comments"], rts, rts
+            ),
+        )
 
     conn.commit()
     conn.close()
@@ -218,6 +258,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path in ["/", "/index.html"]:
+            return self._serve_static("index.html")
+        if parsed.path in ["/ai-dora-regulation", "/regulations/eu-ai-dora"]:
             return self._serve_static("index.html")
         if parsed.path in ["/styles.css", "/app.js"]:
             return self._serve_static(parsed.path[1:])
@@ -520,6 +562,40 @@ class Handler(BaseHTTPRequestHandler):
                 },
             })
 
+        if parsed.path == "/api/regulations/ai-dora":
+            q = parse_qs(parsed.query)
+            article = q.get("article", [""])[0].strip()
+            domain = q.get("domain", [""])[0].strip()
+            status_filter = q.get("status", [""])[0].strip()
+            responsible_party = q.get("responsible_party", [""])[0].strip()
+            risk_impact = q.get("risk_impact", [""])[0].strip()
+            search = q.get("search", [""])[0].strip()
+            where = ["1=1"]
+            vals = []
+            if article:
+                where.append("article_reference LIKE ?"); vals.append(f"%{article}%")
+            if domain:
+                where.append("control_domain=?"); vals.append(domain)
+            if status_filter:
+                where.append("status=?"); vals.append(status_filter)
+            if responsible_party:
+                where.append("responsible_party LIKE ?"); vals.append(f"%{responsible_party}%")
+            if risk_impact:
+                where.append("risk_impact=?"); vals.append(risk_impact)
+            if search:
+                where.append("(requirement_title LIKE ? OR requirement_summary LIKE ? OR source_excerpt LIKE ?)")
+                vals.extend([f"%{search}%"] * 3)
+            rows = conn.execute(f"SELECT * FROM regulation_requirements WHERE {' AND '.join(where)} ORDER BY article_reference, requirement_id", vals).fetchall()
+            domains = conn.execute("SELECT DISTINCT control_domain FROM regulation_requirements ORDER BY control_domain").fetchall()
+            articles = conn.execute("SELECT DISTINCT article_reference FROM regulation_requirements ORDER BY article_reference").fetchall()
+            by_status = {"open": 0, "in_progress": 0, "closed": 0}
+            by_domain = {}
+            for r in rows:
+                st = r["status"] if r["status"] in by_status else "open"
+                by_status[st] += 1
+                by_domain[r["control_domain"]] = by_domain.get(r["control_domain"], 0) + 1
+            return self._json({"regulation_name": REGULATION_NAME, "source_url": SOURCE_URL, "summary": {"total_requirements": len(rows), "by_status": by_status, "by_domain": by_domain}, "items": [dict(x) for x in rows], "filter_options": {"articles": [x["article_reference"] for x in articles], "domains": [x["control_domain"] for x in domains]}})
+
         if parsed.path == "/api/audit":
             if not can_manage(ctx):
                 return self._json({"error": "Forbidden"}, HTTPStatus.FORBIDDEN)
@@ -547,6 +623,21 @@ class Handler(BaseHTTPRequestHandler):
             if token:
                 SESSIONS.pop(token.value, None)
             return self._json({"ok": True}, cookie="session=; Max-Age=0; Path=/")
+        if self.path == "/api/regulations/ai-dora/status":
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            conn, ctx = self._require_auth()
+            if not conn:
+                return
+            rid = payload.get("requirement_id", "")
+            st = payload.get("status", "").lower()
+            comments = payload.get("comments", "")
+            if st not in PM_STATUSES:
+                return self._json({"error": "Invalid status"}, HTTPStatus.BAD_REQUEST)
+            if not can_manage(ctx):
+                return self._json({"error": "Forbidden"}, HTTPStatus.FORBIDDEN)
+            conn.execute("UPDATE regulation_requirements SET status=?, comments=?, updated_at=? WHERE requirement_id=?", (st, comments, now_iso(), rid))
+            conn.commit()
+            return self._json({"ok": True})
 
         conn, ctx = self._require_auth()
         if not conn:
