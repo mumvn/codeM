@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NIST CSF 2.0 Explorer</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>NIST Cybersecurity Framework 2.0</h1>
+      <p class="subtitle">Function Selector → Control View → Admin Dashboard</p>
+    </div>
+    <div class="header-actions">
+      <button id="dashboardBtn" hidden>Admin Dashboard</button>
+      <button id="regulationBtn" hidden>AI / DORA Regulation</button>
+      <div id="profile"></div>
+      <button id="logoutBtn" hidden>Logout</button>
+    </div>
+  </header>
+
+  <section id="loginCard" class="card">
+    <h2>Sign in</h2>
+    <div class="form-row">
+      <input id="username" placeholder="username" />
+      <input id="password" type="password" placeholder="password" />
+      <button id="loginBtn">Login</button>
+    </div>
+    <p class="muted">Demo users: alice, ravi, priya, ops1, viewer, prodmanager1-10 (password: password123)</p>
+    <p id="loginErr" class="error"></p>
+  </section>
+
+  <main id="main" hidden>
+    <section id="homeView" class="card" hidden>
+      <h2>Choose a CSF Function</h2>
+      <p class="muted">All users can access all six NIST CSF functions.</p>
+      <div id="functionGrid" class="function-grid"></div>
+    </section>
+
+    <section id="controlView" class="card" hidden>
+      <div class="view-head">
+        <button id="backBtn">← Functions</button>
+        <div>
+          <h2 id="selectionTitle">Control View</h2>
+          <p id="selectionDef" class="muted"></p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <select id="categoryFilter"><option value="">All Categories</option></select>
+        <select id="subcategoryFilter"><option value="">All Subcategories</option></select>
+        <input id="controlIdFilter" placeholder="Control ID" />
+        <input id="search" placeholder="Keywords / search" />
+        <select id="statusFilter" hidden>
+          <option value="">All Statuses</option>
+          <option value="released">Released</option>
+          <option value="hidden">Hidden</option>
+          <option value="soft_deleted">Soft Deleted</option>
+          <option value="deprecated">Deprecated</option>
+        </select>
+        <select id="sortBy">
+          <option value="control_id">Sort: Control ID</option>
+          <option value="subcategory_code">Sort: Subcategory</option>
+          <option value="category_code">Sort: Category</option>
+          <option value="status">Sort: Status</option>
+        </select>
+        <select id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select>
+      </div>
+
+      <div id="managePanel" class="manage-panel" hidden>
+        <input id="actionComment" placeholder="Optional reason/comment" />
+        <button id="releaseBtn">Release Selected Controls</button>
+        <button id="hideBtn">Remove Selected Controls from Visibility</button>
+        <button id="deleteBtn">Soft Delete</button>
+        <button id="restoreBtn">Restore</button>
+        <button id="deprecateBtn">Mark Deprecated</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="control-table">
+          <colgroup>
+            <col class="col-select" />
+            <col class="col-function" />
+            <col class="col-category" />
+            <col class="col-subcategory" />
+            <col class="col-control-id" />
+            <col class="col-definition" />
+            <col class="col-pm-status" />
+            <col class="col-pm-comment" />
+            <col class="col-status" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th id="selectHead" hidden>Select</th>
+              <th>Function</th><th>Category</th><th>Subcategory</th><th>Control ID</th><th>Definition</th>
+              <th id="pmStatusHead" hidden>My Status</th>
+              <th id="pmCommentHead" hidden>My Comment / Updated</th>
+              <th id="statusHead" hidden>Status</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="prev">Prev</button>
+        <span id="pageMeta"></span>
+        <button id="next">Next</button>
+      </div>
+    </section>
+
+    <section id="dashboardView" class="card" hidden>
+      <div class="view-head">
+        <button id="dashBackBtn">← Back</button>
+        <h2>Product Manager Status Dashboard</h2>
+      </div>
+      <div class="toolbar">
+        <input id="dashPm" placeholder="Product manager username" />
+        <select id="dashFunction"><option value="">All Functions</option></select>
+        <select id="dashCategory"><option value="">All Categories</option></select>
+        <select id="dashSubcategory"><option value="">All Subcategories</option></select>
+        <select id="dashStatus"><option value="">All PM Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option><option value="closed">Closed</option></select>
+        <input id="dashStart" type="date" />
+        <input id="dashEnd" type="date" />
+        <button id="dashApply">Apply Filters</button>
+        <button id="dashReset">Reset Filters</button>
+      </div>
+      <div class="summary-cards" id="summaryCards"></div>
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Status Distribution</h3><canvas id="statusPie"></canvas></div>
+        <div class="chart-card"><h3>PM Status Breakdown</h3><canvas id="pmBar"></canvas></div>
+        <div class="chart-card"><h3>Status Trend</h3><canvas id="trendLine"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Progress Timeline (Gantt-style)</h3>
+        <div id="timelineRows"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="control-table">
+          <thead><tr><th>Product Manager</th><th>Total</th><th>Open</th><th>In Progress</th><th>Closed</th><th>Completion %</th><th>Overdue/Stale</th></tr></thead>
+          <tbody id="dashRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="regulationView" class="card" hidden>
+      <div class="view-head">
+        <button id="regBackBtn">← Back</button>
+        <h2>AI / DORA Regulation</h2>
+      </div>
+      <p id="regMeta" class="muted"></p>
+      <div class="toolbar">
+        <input id="regSearch" placeholder="Search requirements" />
+        <select id="regArticle"><option value="">All Articles</option></select>
+        <select id="regDomain"><option value="">All Domains</option></select>
+        <select id="regStatus"><option value="">All Statuses</option><option value="open">Open</option><option value="in_progress">In Progress</option><option value="closed">Closed</option></select>
+        <input id="regResponsible" placeholder="Responsible party" />
+        <select id="regRisk"><option value="">All Risks</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+        <button id="regApply">Apply</button>
+      </div>
+      <div class="summary-cards" id="regSummary"></div>
+      <div class="table-wrap">
+        <table class="control-table">
+          <thead><tr><th>Req ID</th><th>Article</th><th>Domain</th><th>Title</th><th>Responsible</th><th>Risk</th><th>Status</th><th>Evidence / Notes</th></tr></thead>
+          <tbody id="regRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
