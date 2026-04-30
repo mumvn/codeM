@@ -166,6 +166,22 @@ def init_db():
     user_cols = [r[1] for r in cur.execute("PRAGMA table_info(users)").fetchall()]
     if "department_id" not in user_cols:
         cur.execute("ALTER TABLE users ADD COLUMN department_id INTEGER")
+    # Backward-compatible migration for regulation_articles (older DBs may lack newer columns)
+    reg_article_cols = {r[1] for r in cur.execute("PRAGMA table_info(regulation_articles)").fetchall()}
+    reg_article_additions = {
+        "chapter_number": "INTEGER",
+        "chapter_title": "TEXT",
+        "why_it_matters": "TEXT",
+        "affected_roles": "TEXT",
+        "required_org_actions": "TEXT",
+        "required_technical_actions": "TEXT",
+        "required_evidence": "TEXT",
+        "review_frequency": "TEXT",
+        "risk_if_not_implemented": "TEXT",
+    }
+    for col, ctype in reg_article_additions.items():
+        if col not in reg_article_cols:
+            cur.execute(f"ALTER TABLE regulation_articles ADD COLUMN {col} {ctype}")
 
     cur.executemany("INSERT OR IGNORE INTO functions(code,name,description) VALUES(?,?,?)", FUNCTIONS)
     f_map = {r["code"]: r["id"] for r in cur.execute("SELECT id, code FROM functions")}
