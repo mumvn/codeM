@@ -1,19 +1,15 @@
-import hashlib
 import json
 import secrets
 import sqlite3
-from http import HTTPStatus
+from datetime import datetime
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from data.csf_seed import FUNCTIONS, CATEGORIES, CONTROLS
-
 BASE_DIR = Path(__file__).parent
-DB_PATH = BASE_DIR / "csf.db"
+DB_PATH = BASE_DIR / "mvp.db"
 STATIC_DIR = BASE_DIR / "static"
-
 SESSIONS = {}
 
 
@@ -23,390 +19,106 @@ def db_conn():
     return conn
 
 
-def hash_pw(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
 def init_db():
     conn = db_conn()
     cur = conn.cursor()
     cur.executescript(
         """
-        CREATE TABLE IF NOT EXISTS functions (
-            id INTEGER PRIMARY KEY,
-            code TEXT UNIQUE,
-            name TEXT,
-            description TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY,
-            code TEXT UNIQUE,
-            function_id INTEGER,
-            name TEXT,
-            description TEXT,
-            FOREIGN KEY(function_id) REFERENCES functions(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS subcategories (
-            id INTEGER PRIMARY KEY,
-            code TEXT UNIQUE,
-            category_id INTEGER,
-            name TEXT,
-            definition TEXT,
-            FOREIGN KEY(category_id) REFERENCES categories(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS controls (
-            id INTEGER PRIMARY KEY,
-            subcategory_id INTEGER,
-            control_code TEXT,
-            control_type TEXT,
-            details TEXT,
-            FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS functional_groups (id INTEGER PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-        CREATE TABLE IF NOT EXISTS roles (
-            id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE,
-            access_level INTEGER,
-            functional_group_id INTEGER,
-            FOREIGN KEY(functional_group_id) REFERENCES functional_groups(id)
-        );
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
-            username TEXT UNIQUE,
-            password_hash TEXT,
-            role_id INTEGER,
-            FOREIGN KEY(role_id) REFERENCES roles(id)
-        );
-        CREATE TABLE IF NOT EXISTS role_category_permissions (
-            role_id INTEGER,
-            category_id INTEGER,
-            PRIMARY KEY(role_id, category_id),
-            FOREIGN KEY(role_id) REFERENCES roles(id),
-            FOREIGN KEY(category_id) REFERENCES categories(id)
-        );
+        CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, email TEXT UNIQUE, password TEXT, name TEXT, role TEXT);
+        CREATE TABLE IF NOT EXISTS properties(id INTEGER PRIMARY KEY, name TEXT, address TEXT, property_type TEXT, ownership_status TEXT, construction_year INTEGER, notes TEXT);
+        CREATE TABLE IF NOT EXISTS floors(id INTEGER PRIMARY KEY, property_id INTEGER, name TEXT);
+        CREATE TABLE IF NOT EXISTS rooms(id INTEGER PRIMARY KEY, floor_id INTEGER, name TEXT, room_type TEXT);
+        CREATE TABLE IF NOT EXISTS assets(id INTEGER PRIMARY KEY, room_id INTEGER, name TEXT, asset_type TEXT);
+        CREATE TABLE IF NOT EXISTS asset_parts(id INTEGER PRIMARY KEY, asset_id INTEGER, name TEXT);
+        CREATE TABLE IF NOT EXISTS vendors(id INTEGER PRIMARY KEY, name TEXT, category TEXT, contact_details TEXT, service_area TEXT, notes TEXT);
+        CREATE TABLE IF NOT EXISTS responsibilities(id INTEGER PRIMARY KEY, target_type TEXT, target_id INTEGER, assigned_to_type TEXT, assigned_to_id INTEGER, responsibility_type TEXT, assignment_date TEXT, due_date TEXT, notes TEXT, status TEXT);
+        CREATE TABLE IF NOT EXISTS issues(id INTEGER PRIMARY KEY, title TEXT, description TEXT, severity TEXT, priority TEXT, status TEXT, property_id INTEGER, floor_id INTEGER, room_id INTEGER, asset_id INTEGER, part_id INTEGER, responsible_id INTEGER, due_date TEXT, estimated_cost REAL, actual_cost REAL);
+        CREATE TABLE IF NOT EXISTS issue_status_history(id INTEGER PRIMARY KEY, issue_id INTEGER, from_status TEXT, to_status TEXT, changed_at TEXT, note TEXT);
+        CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY, name TEXT, document_type TEXT, linked_type TEXT, linked_id INTEGER, expiry_date TEXT, upload_date TEXT, file_path TEXT);
+        CREATE TABLE IF NOT EXISTS costs(id INTEGER PRIMARY KEY, amount REAL, currency TEXT, category TEXT, invoice_number TEXT, tax_relevant INTEGER, payment_status TEXT, linked_type TEXT, linked_id INTEGER, document_id INTEGER);
+        CREATE TABLE IF NOT EXISTS government_checklist(id INTEGER PRIMARY KEY, property_id INTEGER, item_name TEXT, status TEXT, reference_number TEXT, external_link TEXT);
+        CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY, notif_type TEXT, message TEXT, status TEXT, related_type TEXT, related_id INTEGER, created_at TEXT);
+        CREATE TABLE IF NOT EXISTS audit_logs(id INTEGER PRIMARY KEY, entity_type TEXT, entity_id TEXT, action TEXT, actor TEXT, payload TEXT, created_at TEXT);
         """
     )
-
-
-    # Backward-compatible migration for older local DBs
-    controls_cols = {row[1] for row in cur.execute("PRAGMA table_info(controls)").fetchall()}
-    expected_controls_cols = {"id", "subcategory_id", "control_code", "control_type", "details"}
-    if controls_cols and controls_cols != expected_controls_cols:
-        cur.executescript(
-            """
-            DROP TABLE IF EXISTS controls;
-            CREATE TABLE controls (
-                id INTEGER PRIMARY KEY,
-                subcategory_id INTEGER,
-                control_code TEXT,
-                control_type TEXT,
-                details TEXT,
-                FOREIGN KEY(subcategory_id) REFERENCES subcategories(id)
-            );
-            """
-        )
-
-    subcat_cols = {row[1] for row in cur.execute("PRAGMA table_info(subcategories)").fetchall()}
-    expected_subcat_cols = {"id", "code", "category_id", "name", "definition"}
-    if subcat_cols and subcat_cols != expected_subcat_cols:
-        cur.executescript(
-            """
-            DROP TABLE IF EXISTS subcategories;
-            CREATE TABLE subcategories (
-                id INTEGER PRIMARY KEY,
-                code TEXT UNIQUE,
-                category_id INTEGER,
-                name TEXT,
-                definition TEXT,
-                FOREIGN KEY(category_id) REFERENCES categories(id)
-            );
-            """
-        )
-
-    cur.executemany("INSERT OR IGNORE INTO functions(code,name,description) VALUES(?,?,?)", FUNCTIONS)
-    function_map = {r["code"]: r["id"] for r in cur.execute("SELECT id, code FROM functions")}
-
-    cur.executemany(
-        "INSERT OR IGNORE INTO categories(code,function_id,name,description) VALUES(?,?,?,?)",
-        [(c, function_map[f], n, d) for c, f, n, d in CATEGORIES],
-    )
-    cat_map = {r["code"]: r["id"] for r in cur.execute("SELECT id, code FROM categories")}
-
-    # Subcategories are CSF Core outcomes from Appendix A (CONTROLS seed list)
-    subcat_rows = []
-    control_rows = []
-    for code, cat_code, definition in CONTROLS:
-        subcat_rows.append((code, cat_map[cat_code], code, definition))
-    cur.executemany(
-        "INSERT OR IGNORE INTO subcategories(code,category_id,name,definition) VALUES(?,?,?,?)",
-        subcat_rows,
-    )
-
-    subcat_map = {r["code"]: r["id"] for r in cur.execute("SELECT id, code FROM subcategories")}
-    for code, _cat_code, definition in CONTROLS:
-        control_rows.append((subcat_map[code], code, "NIST-CSF-2.0-Core", definition))
-
-    cur.executemany(
-        "INSERT OR IGNORE INTO controls(subcategory_id,control_code,control_type,details) VALUES(?,?,?,?)",
-        control_rows,
-    )
-
-    groups = [
-        ("Compliance", "Compliance officers and auditors"),
-        ("Risk", "Risk officers and governance teams"),
-        ("Product", "IT product management"),
-        ("Operations", "Technical operations and SOC teams"),
-    ]
-    cur.executemany("INSERT OR IGNORE INTO functional_groups(name,description) VALUES(?,?)", groups)
-    group_map = {r["name"]: r["id"] for r in cur.execute("SELECT id,name FROM functional_groups")}
-
-    roles = [
-        ("compliance_officer", 4, group_map["Compliance"]),
-        ("risk_officer", 3, group_map["Risk"]),
-        ("product_manager", 2, group_map["Product"]),
-        ("tech_ops", 1, group_map["Operations"]),
-    ]
-    cur.executemany("INSERT OR IGNORE INTO roles(name,access_level,functional_group_id) VALUES(?,?,?)", roles)
-    role_map = {r["name"]: r["id"] for r in cur.execute("SELECT id,name FROM roles")}
-
-    default_users = [
-        ("alice", "password123", "compliance_officer"),
-        ("ravi", "password123", "risk_officer"),
-        ("priya", "password123", "product_manager"),
-        ("ops1", "password123", "tech_ops"),
-    ]
-    cur.executemany(
-        "INSERT OR IGNORE INTO users(username,password_hash,role_id) VALUES(?,?,?)",
-        [(u, hash_pw(p), role_map[r]) for u, p, r in default_users],
-    )
-
-    perms = {
-        "compliance_officer": ["GV", "ID", "PR", "DE", "RS", "RC"],
-        "risk_officer": ["GV", "ID", "DE", "RS", "RC"],
-        "product_manager": ["GV", "ID", "PR"],
-        "tech_ops": ["PR", "DE", "RS", "RC"],
-    }
-    function_cats = {}
-    for r in cur.execute("SELECT c.id, f.code AS fcode FROM categories c JOIN functions f ON c.function_id=f.id"):
-        function_cats.setdefault(r["fcode"], []).append(r["id"])
-
-    rows = []
-    for role_name, fn_codes in perms.items():
-        for fcode in fn_codes:
-            for cid in function_cats.get(fcode, []):
-                rows.append((role_map[role_name], cid))
-    cur.executemany("INSERT OR IGNORE INTO role_category_permissions(role_id,category_id) VALUES(?,?)", rows)
-
+    cur.execute("INSERT OR IGNORE INTO users(id,email,password,name,role) VALUES(1,'owner@example.com','password','Owner User','Property Owner')")
+    if cur.execute("SELECT COUNT(*) c FROM properties").fetchone()[0] == 0:
+        seed(cur)
     conn.commit()
     conn.close()
 
 
-def get_session_user(headers):
-    cookie = SimpleCookie(headers.get("Cookie"))
-    token = cookie.get("session")
-    if not token:
-        return None
-    return SESSIONS.get(token.value)
+def seed(cur):
+    cur.execute("INSERT INTO properties(name,address,property_type,ownership_status,construction_year,notes) VALUES(?,?,?,?,?,?)", ("Sample Family House", "123 Lakeview Ave", "House", "Owned", 2012, "Demo property"))
+    pid = cur.lastrowid
+    cur.execute("INSERT INTO floors(property_id,name) VALUES(?,?)", (pid, "Ground Floor"))
+    gf = cur.lastrowid
+    cur.execute("INSERT INTO floors(property_id,name) VALUES(?,?)", (pid, "First Floor"))
+    ff = cur.lastrowid
+    rooms = [(gf, "Bathroom 1", "Bathroom"), (gf, "Kitchen", "Kitchen"), (gf, "Living Room", "Living"), (ff, "Bedroom 1", "Bedroom"), (ff, "Balcony", "Balcony")]
+    room_ids = {}
+    for f, n, t in rooms:
+        cur.execute("INSERT INTO rooms(floor_id,name,room_type) VALUES(?,?,?)", (f, n, t)); room_ids[n] = cur.lastrowid
+    assets = [("Bathroom window", room_ids["Bathroom 1"]), ("Shower mixer", room_ids["Bathroom 1"]), ("Toilet flush", room_ids["Bathroom 1"]), ("Kitchen sink", room_ids["Kitchen"]), ("Bedroom window", room_ids["Bedroom 1"]), ("Main door", room_ids["Living Room"]), ("Electrical sockets", room_ids["Living Room"]), ("Water pipe", room_ids["Bathroom 1"]), ("Roof drainage", room_ids["Balcony"])]
+    for n, r in assets: cur.execute("INSERT INTO assets(room_id,name,asset_type) VALUES(?,?,?)", (r, n, "Component"))
+    for v in ["Plumber", "Electrician", "Carpenter", "Interior contractor", "Painter"]:
+        cur.execute("INSERT INTO vendors(name,category,contact_details,service_area,notes) VALUES(?,?,?,?,?)", (v, v, "N/A", "Local", "seed"))
+    cur.execute("INSERT INTO issues(title,description,severity,priority,status,property_id) VALUES(?,?,?,?,?,?)", ("Bathroom leakage", "Leak near shower mixer", "High", "High", "IN_PROGRESS", pid))
+
+
+def json_response(handler, data, status=200, cookie=None):
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json")
+    if cookie:
+        handler.send_header("Set-Cookie", cookie)
+    handler.end_headers()
+    handler.wfile.write(json.dumps(data).encode())
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _json(self, payload, status=200, cookie=None):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        if cookie:
-            self.send_header("Set-Cookie", cookie)
-        self.end_headers()
-        self.wfile.write(json.dumps(payload).encode())
-
-    def _serve_static(self, path="index.html"):
-        fpath = STATIC_DIR / path
-        if not fpath.exists():
-            self.send_error(404)
-            return
-
-        ctype = "text/html"
-        if path.endswith(".css"):
-            ctype = "text/css"
-        elif path.endswith(".js"):
-            ctype = "application/javascript"
-
-        self.send_response(200)
-        self.send_header("Content-Type", ctype)
-        self.end_headers()
-        self.wfile.write(fpath.read_bytes())
-
     def do_GET(self):
-        parsed = urlparse(self.path)
-
-        if parsed.path in ["/", "/index.html"]:
-            return self._serve_static("index.html")
-        if parsed.path in ["/styles.css", "/app.js"]:
-            return self._serve_static(parsed.path[1:])
-
-        user = get_session_user(self.headers)
-        if not user:
-            return self._json({"error": "Unauthorized"}, HTTPStatus.UNAUTHORIZED)
-
-        conn = db_conn()
-
-        if parsed.path == "/api/bootstrap":
-            me_q = """
-                SELECT u.username, r.name role_name, r.access_level, fg.name functional_group
-                FROM users u
-                JOIN roles r ON u.role_id=r.id
-                JOIN functional_groups fg ON r.functional_group_id=fg.id
-                WHERE u.id=?
-            """
-            me = dict(conn.execute(me_q, (user["user_id"],)).fetchone())
-
-            rows = conn.execute(
-                """
-                SELECT
-                    f.id AS function_id, f.code AS function_code, f.name AS function_name, f.description AS function_definition,
-                    c.id AS category_id, c.code AS category_code, c.name AS category_name, c.description AS category_definition,
-                    s.id AS subcategory_id, s.code AS subcategory_code, s.name AS subcategory_name, s.definition AS subcategory_definition
-                FROM functions f
-                JOIN categories c ON c.function_id=f.id
-                JOIN role_category_permissions p ON p.category_id=c.id
-                JOIN users u ON u.role_id=p.role_id
-                LEFT JOIN subcategories s ON s.category_id=c.id
-                WHERE u.id=?
-                ORDER BY f.id, c.code, s.code
-                """,
-                (user["user_id"],),
-            ).fetchall()
-
-            fn_map = {}
-            for r in rows:
-                fkey = r["function_id"]
-                if fkey not in fn_map:
-                    fn_map[fkey] = {
-                        "id": r["function_id"],
-                        "code": r["function_code"],
-                        "name": r["function_name"],
-                        "definition": r["function_definition"],
-                        "categories": {},
-                    }
-                ckey = r["category_id"]
-                if ckey not in fn_map[fkey]["categories"]:
-                    fn_map[fkey]["categories"][ckey] = {
-                        "id": r["category_id"],
-                        "code": r["category_code"],
-                        "name": r["category_name"],
-                        "definition": r["category_definition"],
-                        "subcategories": [],
-                    }
-                if r["subcategory_id"]:
-                    fn_map[fkey]["categories"][ckey]["subcategories"].append(
-                        {
-                            "id": r["subcategory_id"],
-                            "code": r["subcategory_code"],
-                            "name": r["subcategory_name"],
-                            "definition": r["subcategory_definition"],
-                        }
-                    )
-
-            tree = []
-            for f in fn_map.values():
-                f["categories"] = list(f["categories"].values())
-                tree.append(f)
-
-            return self._json({"me": me, "tree": tree})
-
-        if parsed.path == "/api/controls":
-            params = parse_qs(parsed.query)
-            category_id = params.get("category_id", [None])[0]
-            function_id = params.get("function_id", [None])[0]
-            search = params.get("search", [""])[0]
-            sort_by = params.get("sort_by", ["subcategory_code"])[0]
-            sort_dir = params.get("sort_dir", ["asc"])[0].upper()
-            page = int(params.get("page", [1])[0])
-            page_size = min(int(params.get("page_size", [10])[0]), 100)
-            if sort_by not in {"subcategory_code", "subcategory_name", "control_code"}:
-                sort_by = "subcategory_code"
-            if sort_dir not in {"ASC", "DESC"}:
-                sort_dir = "ASC"
-
-            where = ["u.id=?"]
-            vals = [user["user_id"]]
-            if function_id:
-                where.append("f.id=?")
-                vals.append(function_id)
-            if category_id:
-                where.append("c.id=?")
-                vals.append(category_id)
-            if search:
-                where.append("(s.code LIKE ? OR s.definition LIKE ? OR c.name LIKE ?)")
-                vals.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
-
-            where_sql = " AND ".join(where)
-            base = f"""
-                FROM controls ctrl
-                JOIN subcategories s ON ctrl.subcategory_id=s.id
-                JOIN categories c ON s.category_id=c.id
-                JOIN functions f ON c.function_id=f.id
-                JOIN role_category_permissions p ON p.category_id=c.id
-                JOIN users u ON u.role_id=p.role_id
-                WHERE {where_sql}
-            """
-            total = conn.execute(f"SELECT COUNT(*) {base}", vals).fetchone()[0]
-            offset = (page - 1) * page_size
-            rows = conn.execute(
-                f"""
-                SELECT
-                    f.code function_code, f.name function_name,
-                    c.code category_code, c.name category_name,
-                    s.code subcategory_code, s.name subcategory_name, s.definition subcategory_definition,
-                    ctrl.control_code, ctrl.control_type, ctrl.details
-                {base}
-                ORDER BY {sort_by} {sort_dir}
-                LIMIT ? OFFSET ?
-                """,
-                vals + [page_size, offset],
-            ).fetchall()
-
-            return self._json({"items": [dict(r) for r in rows], "total": total, "page": page, "page_size": page_size})
-
-        return self._json({"error": "Not found"}, 404)
+        path = urlparse(self.path).path
+        if path == "/" or path in ["/app.js", "/styles.css", "/index.html"]:
+            f = "index.html" if path == "/" else path.lstrip("/")
+            ctype = "text/html" if f.endswith("html") else ("application/javascript" if f.endswith("js") else "text/css")
+            self.send_response(200); self.send_header("Content-Type", ctype); self.end_headers(); self.wfile.write((STATIC_DIR / f).read_bytes()); return
+        if path == "/api/bootstrap":
+            conn = db_conn()
+            data = {
+                "properties": [dict(r) for r in conn.execute("SELECT * FROM properties")],
+                "issues": [dict(r) for r in conn.execute("SELECT * FROM issues")],
+                "vendors": [dict(r) for r in conn.execute("SELECT * FROM vendors")],
+                "documents": [dict(r) for r in conn.execute("SELECT * FROM documents")],
+                "costs": [dict(r) for r in conn.execute("SELECT * FROM costs")],
+                "checklist": [dict(r) for r in conn.execute("SELECT * FROM government_checklist")],
+            }
+            conn.close(); return json_response(self, data)
+        self.send_error(404)
 
     def do_POST(self):
-        if self.path == "/api/login":
-            content_len = int(self.headers.get("Content-Length", 0))
-            payload = json.loads(self.rfile.read(content_len) or b"{}")
-            username = payload.get("username", "")
-            password = payload.get("password", "")
-
-            conn = db_conn()
-            row = conn.execute(
-                "SELECT id, username FROM users WHERE username=? AND password_hash=?",
-                (username, hash_pw(password)),
-            ).fetchone()
-            if not row:
-                return self._json({"error": "Invalid credentials"}, HTTPStatus.UNAUTHORIZED)
-            token = secrets.token_hex(24)
-            SESSIONS[token] = {"user_id": row["id"], "username": row["username"]}
-            return self._json({"ok": True}, cookie=f"session={token}; HttpOnly; Path=/; SameSite=Lax")
-
-        if self.path == "/api/logout":
-            cookie = SimpleCookie(self.headers.get("Cookie"))
-            token = cookie.get("session")
-            if token:
-                SESSIONS.pop(token.value, None)
-            return self._json({"ok": True}, cookie="session=; Max-Age=0; Path=/")
-
-        return self._json({"error": "Not found"}, 404)
-
-
-def run():
-    init_db()
-    server = HTTPServer(("0.0.0.0", 8000), Handler)
-    print("Server running on http://localhost:8000")
-    server.serve_forever()
+        path = urlparse(self.path).path
+        n = int(self.headers.get("Content-Length", 0)); body = json.loads(self.rfile.read(n) or "{}")
+        conn = db_conn(); cur = conn.cursor()
+        if path == "/api/login":
+            u = cur.execute("SELECT * FROM users WHERE email=? AND password=?", (body.get("email"), body.get("password"))).fetchone()
+            if not u: conn.close(); return json_response(self, {"error": "Invalid credentials"}, 401)
+            t = secrets.token_hex(16); SESSIONS[t] = u["id"]; conn.close(); return json_response(self, {"ok": True}, cookie=f"session={t}; Path=/")
+        if path == "/api/properties":
+            cur.execute("INSERT INTO properties(name,address,property_type,ownership_status,construction_year,notes) VALUES(?,?,?,?,?,?)", (body["name"], body.get("address"), body.get("property_type"), body.get("ownership_status"), body.get("construction_year"), body.get("notes"))); pid = cur.lastrowid
+            cur.execute("INSERT INTO audit_logs(entity_type,entity_id,action,actor,created_at) VALUES(?,?,?,?,?)", ("property", str(pid), "created", "owner@example.com", datetime.utcnow().isoformat()))
+        elif path == "/api/issues":
+            cur.execute("INSERT INTO issues(title,description,severity,priority,status,property_id,room_id,asset_id,due_date,estimated_cost) VALUES(?,?,?,?,?,?,?,?,?,?)", (body["title"], body.get("description"), body.get("severity","Medium"), body.get("priority","Medium"), "NEW", body.get("property_id"), body.get("room_id"), body.get("asset_id"), body.get("due_date"), body.get("estimated_cost",0)))
+        elif path == "/api/issues/status":
+            issue = cur.execute("SELECT status FROM issues WHERE id=?", (body["issue_id"],)).fetchone(); old = issue[0]
+            cur.execute("UPDATE issues SET status=? WHERE id=?", (body["status"], body["issue_id"]))
+            cur.execute("INSERT INTO issue_status_history(issue_id,from_status,to_status,changed_at,note) VALUES(?,?,?,?,?)", (body["issue_id"], old, body["status"], datetime.utcnow().isoformat(), body.get("note","")))
+        elif path == "/api/documents":
+            cur.execute("INSERT INTO documents(name,document_type,linked_type,linked_id,expiry_date,upload_date,file_path) VALUES(?,?,?,?,?,?,?)", (body["name"], body["document_type"], body.get("linked_type"), body.get("linked_id"), body.get("expiry_date"), datetime.utcnow().isoformat(), body.get("file_path","mock://file")))
+        elif path == "/api/costs":
+            cur.execute("INSERT INTO costs(amount,currency,category,invoice_number,tax_relevant,payment_status,linked_type,linked_id,document_id) VALUES(?,?,?,?,?,?,?,?,?)", (body["amount"], body.get("currency","USD"), body.get("category"), body.get("invoice_number"), 1 if body.get("tax_relevant") else 0, body.get("payment_status","PENDING"), body.get("linked_type"), body.get("linked_id"), body.get("document_id")))
+        conn.commit(); conn.close(); return json_response(self, {"ok": True})
 
 
 if __name__ == "__main__":
-    run()
+    init_db()
+    HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()

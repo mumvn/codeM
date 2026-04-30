@@ -1,70 +1,11 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>NIST CSF 2.0 Hierarchy Explorer</title>
-  <link rel="stylesheet" href="/styles.css"/>
-</head>
-<body>
-<div class="app">
-  <header>
-    <div>
-      <h1>NIST Cybersecurity Framework 2.0</h1>
-      <p class="subtitle">Hierarchy: Function → Category → Subcategory → Control</p>
-    </div>
-    <div id="profile"></div>
-    <button id="logoutBtn" hidden>Logout</button>
-  </header>
-
-  <section id="loginCard" class="card">
-    <h2>Sign in</h2>
-    <p>Demo users: alice, ravi, priya, ops1 (password: <code>password123</code>)</p>
-    <div class="form-row">
-      <input id="username" placeholder="username" />
-      <input id="password" type="password" placeholder="password" />
-      <button id="loginBtn">Login</button>
-    </div>
-    <p id="loginErr" class="error"></p>
-  </section>
-
-  <main id="main" hidden>
-    <section class="layout">
-      <aside class="card" id="sidebar">
-        <h2>Framework Tree</h2>
-        <p class="muted">Expandable definitions at every level.</p>
-        <div id="tree"></div>
-      </aside>
-
-      <section class="card">
-        <h2 id="selectionTitle">Choose a function or category</h2>
-        <p id="selectionDef" class="muted"></p>
-        <div class="toolbar">
-          <input id="search" placeholder="Search subcategories/controls" />
-          <select id="sortBy">
-            <option value="subcategory_code">Sort: Subcategory Code</option>
-            <option value="subcategory_name">Sort: Subcategory Name</option>
-            <option value="control_code">Sort: Control Code</option>
-          </select>
-          <select id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Function</th><th>Category</th><th>Subcategory</th><th>Subcategory Definition</th><th>Control</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-        <div class="pager">
-          <button id="prev">Prev</button>
-          <span id="pageMeta"></span>
-          <button id="next">Next</button>
-        </div>
-      </section>
-    </section>
-  </main>
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Home Asset Accountability Platform</title><link rel='stylesheet' href='/styles.css'></head><body>
+<h1>Home Asset Accountability Platform (MVP)</h1>
+<div class='card'>Login: <input id='email' value='owner@example.com'> <input id='password' type='password' value='password'><button id='login'>Login</button></div>
+<div class='grid'>
+<div class='card'><h3>Dashboard</h3><pre id='dash'></pre></div>
+<div class='card'><h3>Create Property</h3><input id='pname' placeholder='name'><button id='addProperty'>Add</button></div>
+<div class='card'><h3>Create Issue</h3><input id='ititle' placeholder='title'><button id='addIssue'>Add</button></div>
+<div class='card'><h3>Upload Document (mock)</h3><input id='dname' placeholder='doc'><button id='addDoc'>Upload</button></div>
+<div class='card'><h3>Add Cost</h3><input id='camt' placeholder='amount'><button id='addCost'>Add</button></div>
 </div>
-<script src="/app.js"></script>
-</body>
-</html>
+<script src='/app.js'></script></body></html>
