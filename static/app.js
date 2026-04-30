@@ -1,4 +1,4 @@
-const state = { functionId:null,functionName:'',functionDef:'',page:1,pageSize:12,categoryCode:'',subcategoryCode:'',controlId:'',search:'',status:'',sortBy:'control_id',sortDir:'asc',total:0,canManage:false,isProductManager:false,canDashboard:false,selected:new Set() };
+const state = { functionId:null,functionName:'',functionDef:'',page:1,pageSize:12,categoryCode:'',subcategoryCode:'',controlId:'',search:'',status:'',sortBy:'control_id',sortDir:'asc',total:0,canManage:false,isProductManager:false,canDashboard:false,selected:new Set(),regPage:1,regPageSize:25,regSelected:new Set(),regTotal:0 };
 const charts = { pie:null, bar:null, trend:null };
 
 async function api(path, opts={}) { const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'include',...opts}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
@@ -16,6 +16,9 @@ function configureRoleUI(){
   document.getElementById('pmCommentHead').hidden=!state.isProductManager;
   document.getElementById('dashboardBtn').hidden=!state.canDashboard;
   document.getElementById('regulationBtn').hidden=!state.canManage;
+  document.getElementById('regSelectHead').hidden=!state.canManage;
+  document.getElementById('regSelectAll').hidden=!state.canManage;
+  document.getElementById('regReleaseSelected').hidden=!state.canManage;
 }
 
 function fillSelectOptions(el, options, key, label, placeholder){const curr=el.value; el.innerHTML=`<option value="">${placeholder}</option>`; options.forEach(o=>{const op=document.createElement('option'); op.value=o[key]; op.textContent=label(o); el.appendChild(op)}); if([...el.options].some(o=>o.value===curr)) el.value=curr;}
@@ -82,17 +85,16 @@ async function loadDashboard(){
 function resetDashboardFilters(){ ['dashPm','dashFunction','dashCategory','dashSubcategory','dashStatus','dashStart','dashEnd'].forEach(id=>document.getElementById(id).value=''); loadDashboard(); }
 
 async function loadRegulation(){
-  const q=new URLSearchParams({search:document.getElementById('regSearch').value.trim(),article:document.getElementById('regArticle').value,domain:document.getElementById('regDomain').value,status:document.getElementById('regStatus').value,responsible_party:document.getElementById('regResponsible').value.trim(),risk_impact:document.getElementById('regRisk').value});
-  const data=await api(`/api/regulations/ai-dora?${q.toString()}`);
-  document.getElementById('regMeta').innerHTML=`${data.regulation_name} · <a href="${data.source_url}" target="_blank">Source</a>`;
-  fillSelectOptions(document.getElementById('regArticle'), data.filter_options.articles.map(a=>({v:a})), 'v', x=>x.v, 'All Articles');
+  const q=new URLSearchParams({search:document.getElementById('regSearch').value.trim(),domain:document.getElementById('regDomain').value,page:state.regPage,page_size:state.regPageSize});
+  const data=await api(`/api/regulation-articles?${q.toString()}`);
+  state.regTotal=data.total;
+  document.getElementById('regMeta').innerHTML=`AI / DORA Regulation Explorer · 113 Articles`;
   fillSelectOptions(document.getElementById('regDomain'), data.filter_options.domains.map(d=>({v:d})), 'v', x=>x.v, 'All Domains');
-  const s=data.summary;
-  document.getElementById('regSummary').innerHTML=`<div class='sum-card'><b>Total requirements</b><span>${s.total_requirements}</span></div>
-  <div class='sum-card'><b>Open</b><span>${s.by_status.open}</span></div><div class='sum-card'><b>In Progress</b><span>${s.by_status.in_progress}</span></div><div class='sum-card'><b>Closed</b><span>${s.by_status.closed}</span></div>`;
+  document.getElementById('regSummary').innerHTML=`<div class='sum-card'><b>Total articles</b><span>${data.total}</span></div><div class='sum-card'><b>Selected</b><span>${state.regSelected.size}</span></div>`;
   const rows=document.getElementById('regRows'); rows.innerHTML='';
-  data.items.forEach(r=>{const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.requirement_id}</td><td>${r.article_reference}</td><td>${r.control_domain}</td><td><b>${r.requirement_title}</b><div class='muted small'>${r.requirement_summary}</div><div class='muted small'>${r.source_excerpt}</div></td><td>${r.responsible_party||''}</td><td>${r.risk_impact||''}</td><td><select data-rid="${r.requirement_id}" data-comments-id="c-${r.requirement_id}"><option value="open" ${r.status==='open'?'selected':''}>Open</option><option value="in_progress" ${r.status==='in_progress'?'selected':''}>In Progress</option><option value="closed" ${r.status==='closed'?'selected':''}>Closed</option></select></td><td>${r.evidence_required||''}<textarea id="c-${r.requirement_id}" placeholder="comments">${r.comments||''}</textarea><button class="link-btn" data-save-reg="${r.requirement_id}">Save</button></td>`; rows.appendChild(tr);});
-  rows.querySelectorAll('button[data-save-reg]').forEach(btn=>btn.onclick=async()=>{const rid=btn.getAttribute('data-save-reg');const sel=rows.querySelector(`select[data-rid="${rid}"]`);const comments=document.getElementById(`c-${rid}`).value;await api('/api/regulations/ai-dora/status',{method:'POST',body:JSON.stringify({requirement_id:rid,status:sel.value,comments})});await loadRegulation();});
+  data.items.forEach(r=>{const selectCell=state.canManage?`<td><input type="checkbox" data-aid="${r.article_id}" ${state.regSelected.has(r.article_id)?'checked':''}></td>`:''; const tr=document.createElement('tr'); tr.innerHTML=`${selectCell}<td>${r.article_id}</td><td>${r.article_reference}</td><td>${r.control_domain||''}</td><td><b>${r.title}</b><div class='muted small'>${r.summary}</div></td><td>Compliance Officer</td><td>Medium</td><td>${statusBadge(r.status)}</td><td>Policy mapping, approvals, test evidence.</td>`; rows.appendChild(tr);});
+  rows.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.onchange=e=>{const id=e.target.getAttribute('data-aid'); e.target.checked?state.regSelected.add(id):state.regSelected.delete(id);});
+  const max=Math.max(1,Math.ceil(state.regTotal/state.regPageSize)); document.getElementById('regMetaPage').textContent=`Page ${state.regPage}/${max} • ${state.regTotal} articles`;
 }
 
 async function bootstrap(){
@@ -126,6 +128,10 @@ document.getElementById('dashReset').onclick=resetDashboardFilters;
 document.getElementById('regulationBtn').onclick=async()=>{showView('regulationView');await loadRegulation();};
 document.getElementById('regBackBtn').onclick=()=>showView('homeView');
 document.getElementById('regApply').onclick=loadRegulation;
+document.getElementById('regSelectAll').onclick=async()=>{const d=await api('/api/regulation-articles?page=1&page_size=200'); d.items.forEach(x=>state.regSelected.add(x.article_id)); loadRegulation();};
+document.getElementById('regReleaseSelected').onclick=async()=>{if(!state.regSelected.size) return; await api('/api/regulation-articles/bulk-release',{method:'POST',body:JSON.stringify({article_ids:Array.from(state.regSelected)})}); state.regSelected.clear(); loadRegulation();};
+document.getElementById('regPrev').onclick=()=>{if(state.regPage>1){state.regPage--;loadRegulation();}};
+document.getElementById('regNext').onclick=()=>{const max=Math.max(1,Math.ceil(state.regTotal/state.regPageSize));if(state.regPage<max){state.regPage++;loadRegulation();}};
 
 document.getElementById('categoryFilter').onchange=e=>{state.categoryCode=e.target.value;state.page=1;loadControls();};
 document.getElementById('subcategoryFilter').onchange=e=>{state.subcategoryCode=e.target.value;state.page=1;loadControls();};

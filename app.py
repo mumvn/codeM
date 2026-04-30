@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from data.csf_seed import CATEGORIES, CONTROLS, FUNCTIONS
-from data.eu_regulation_seed import REGULATION_NAME, SOURCE_URL, build_seed_requirements
+from data.eu_regulation_seed import REGULATION_NAME, SOURCE_URL, build_seed_requirements, build_all_articles
 
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "csf.db"
@@ -104,6 +104,31 @@ def init_db():
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS regulation_articles (
+            id INTEGER PRIMARY KEY,
+            article_id TEXT UNIQUE NOT NULL,
+            article_number INTEGER NOT NULL,
+            article_reference TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            control_domain TEXT,
+            status TEXT NOT NULL DEFAULT 'released',
+            is_visible_to_general_users INTEGER NOT NULL DEFAULT 1,
+            is_soft_deleted INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS product_manager_article_status (
+            id INTEGER PRIMARY KEY,
+            product_manager_user_id INTEGER NOT NULL,
+            article_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            status_comment TEXT,
+            last_updated_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(product_manager_user_id, article_id)
+        );
         """
     )
 
@@ -190,6 +215,14 @@ def init_db():
                 req["responsible_party"], req["compliance_objective"], req["control_domain"], req["evidence_required"], req["implementation_guidance"], req["deadline_or_frequency"],
                 req["risk_impact"], req["status"], req["reviewer_role"], req["approver_role"], req["comments"], rts, rts
             ),
+        )
+    for art in build_all_articles():
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO regulation_articles(article_id,article_number,article_reference,title,summary,control_domain,status,is_visible_to_general_users,is_soft_deleted,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (art["article_id"], art["article_number"], art["article_reference"], art["title"], art["summary"], art["control_domain"], "released", 1, 0, rts, rts),
         )
 
     conn.commit()
@@ -597,6 +630,23 @@ class Handler(BaseHTTPRequestHandler):
                 by_status[st] += 1
                 by_domain[r["control_domain"]] = by_domain.get(r["control_domain"], 0) + 1
             return self._json({"regulation_name": REGULATION_NAME, "source_url": SOURCE_URL, "summary": {"total_requirements": len(rows), "by_status": by_status, "by_domain": by_domain}, "items": [dict(x) for x in rows], "filter_options": {"articles": [x["article_reference"] for x in articles], "domains": [x["control_domain"] for x in domains]}})
+        if parsed.path == "/api/regulation-articles":
+            q = parse_qs(parsed.query)
+            search = q.get("search", [""])[0].strip()
+            domain = q.get("domain", [""])[0].strip()
+            page = int(q.get("page", [1])[0]); page_size = min(200, int(q.get("page_size", [20])[0]))
+            where = ["is_soft_deleted=0"]; vals = []
+            if not can_manage(ctx):
+                where.append("is_visible_to_general_users=1")
+            if search:
+                where.append("(article_reference LIKE ? OR title LIKE ? OR summary LIKE ?)"); vals.extend([f"%{search}%"]*3)
+            if domain:
+                where.append("control_domain=?"); vals.append(domain)
+            sql_where = " AND ".join(where)
+            total = conn.execute(f"SELECT COUNT(*) c FROM regulation_articles WHERE {sql_where}", vals).fetchone()["c"]
+            rows = conn.execute(f"SELECT * FROM regulation_articles WHERE {sql_where} ORDER BY article_number LIMIT ? OFFSET ?", vals + [page_size, (page-1)*page_size]).fetchall()
+            domains = conn.execute("SELECT DISTINCT control_domain FROM regulation_articles ORDER BY control_domain").fetchall()
+            return self._json({"items":[dict(x) for x in rows], "total": total, "page": page, "page_size": page_size, "can_manage": can_manage(ctx), "filter_options":{"domains":[x["control_domain"] for x in domains]}})
 
         if parsed.path == "/api/audit":
             if not can_manage(ctx):
@@ -640,6 +690,19 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute("UPDATE regulation_requirements SET status=?, comments=?, updated_at=? WHERE requirement_id=?", (st, comments, now_iso(), rid))
             conn.commit()
             return self._json({"ok": True})
+        if self.path == "/api/regulation-articles/bulk-release":
+            conn, ctx = self._require_auth()
+            if not conn:
+                return
+            if not can_manage(ctx):
+                return self._json({"error":"Forbidden"}, HTTPStatus.FORBIDDEN)
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            ids = payload.get("article_ids", [])
+            now = now_iso()
+            for aid in ids:
+                conn.execute("UPDATE regulation_articles SET status='released', is_visible_to_general_users=1, updated_at=? WHERE article_id=?", (now, aid))
+            conn.commit()
+            return self._json({"ok": True, "updated": len(ids)})
 
         conn, ctx = self._require_auth()
         if not conn:

@@ -61,3 +61,24 @@ def build_seed_requirements():
     for idx, (article_ref, body) in enumerate(extract_article_blocks(synthetic_source), start=1):
         rows.extend(map_article_to_requirements(article_ref, body, idx))
     return rows
+
+
+def build_all_articles():
+    rows = []
+    domains = [
+        "Governance", "Risk Management", "ICT Security", "Incident Management",
+        "Third-Party / Vendor Management", "Data Protection", "Reporting",
+        "Audit and Evidence", "Business Continuity / Operational Resilience",
+        "Access Control", "Documentation Obligations", "AI Governance",
+        "Model Risk Management", "Transparency and Explainability", "Human Oversight",
+    ]
+    for i in range(1, 114):
+        rows.append({
+            "article_id": f"ART-{i:03d}",
+            "article_number": i,
+            "article_reference": f"Article {i}",
+            "title": f"EU AI/DORA Article {i}",
+            "summary": f"Structured compliance representation for Article {i}.",
+            "control_domain": domains[(i - 1) % len(domains)],
+        })
+    return rows
