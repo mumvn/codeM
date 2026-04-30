@@ -150,6 +150,7 @@
         <h2>AI / DORA Regulation</h2>
       </div>
       <p id="regMeta" class="muted"></p>
+      <div class="summary-cards" id="regOverviewCards"></div>
       <div class="toolbar">
         <button id="regSelectAll" hidden>Select all</button>
         <button id="regReleaseSelected" hidden>Release selected to Product Managers</button>
@@ -161,12 +162,10 @@
         <select id="regRisk"><option value="">All Risks</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         <button id="regApply">Apply</button>
       </div>
-      <div class="summary-cards" id="regSummary"></div>
-      <div class="table-wrap">
-        <table class="control-table">
-          <thead><tr><th id="regSelectHead" hidden>Select</th><th>Req ID</th><th>Article</th><th>Domain</th><th>Title</th><th>Responsible</th><th>Risk</th><th>Status</th><th>Evidence / Notes</th></tr></thead>
-          <tbody id="regRows"></tbody>
-        </table>
+      <div class="reg-grid">
+        <div class="chart-card"><h3>Chapter / Article Browser</h3><div id="regChapterNav"></div><div class="table-wrap"><table class="control-table"><thead><tr><th id="regSelectHead" hidden>Select</th><th>Article</th><th>Title</th><th>Domain</th></tr></thead><tbody id="regRows"></tbody></table></div></div>
+        <div class="chart-card"><h3>Article Explanation</h3><div id="regArticleDetail" class="muted">Select an article to view details.</div></div>
+        <div class="chart-card"><h3>Obligations & Evidence</h3><div id="regObligations"></div></div>
       </div>
       <div class="pager">
         <button id="regPrev">Prev</button><span id="regMetaPage"></span><button id="regNext">Next</button>

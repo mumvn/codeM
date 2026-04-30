@@ -112,9 +112,39 @@ def init_db():
             title TEXT NOT NULL,
             summary TEXT NOT NULL,
             control_domain TEXT,
+            chapter_number INTEGER,
+            chapter_title TEXT,
+            why_it_matters TEXT,
+            affected_roles TEXT,
+            required_org_actions TEXT,
+            required_technical_actions TEXT,
+            required_evidence TEXT,
+            review_frequency TEXT,
+            risk_if_not_implemented TEXT,
             status TEXT NOT NULL DEFAULT 'released',
             is_visible_to_general_users INTEGER NOT NULL DEFAULT 1,
             is_soft_deleted INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS regulation_obligations (
+            id INTEGER PRIMARY KEY,
+            obligation_id TEXT UNIQUE NOT NULL,
+            article_id TEXT NOT NULL,
+            source_reference TEXT NOT NULL,
+            obligation_summary TEXT NOT NULL,
+            mandatory_action TEXT NOT NULL,
+            responsible_party TEXT NOT NULL,
+            compliance_domain TEXT NOT NULL,
+            evidence_required TEXT NOT NULL,
+            implementation_guidance TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            review_frequency TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            reviewer_role TEXT,
+            approver_role TEXT,
+            comments TEXT,
+            published_to_product_managers INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -219,10 +249,25 @@ def init_db():
     for art in build_all_articles():
         cur.execute(
             """
-            INSERT OR IGNORE INTO regulation_articles(article_id,article_number,article_reference,title,summary,control_domain,status,is_visible_to_general_users,is_soft_deleted,created_at,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            INSERT OR IGNORE INTO regulation_articles(article_id,article_number,article_reference,title,summary,control_domain,chapter_number,chapter_title,why_it_matters,affected_roles,required_org_actions,required_technical_actions,required_evidence,review_frequency,risk_if_not_implemented,status,is_visible_to_general_users,is_soft_deleted,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (art["article_id"], art["article_number"], art["article_reference"], art["title"], art["summary"], art["control_domain"], "released", 1, 0, rts, rts),
+            (art["article_id"], art["article_number"], art["article_reference"], art["title"], art["summary"], art["control_domain"], art["chapter_number"], art["chapter_title"], art["why_it_matters"], art["affected_roles"], art["required_org_actions"], art["required_technical_actions"], art["required_evidence"], art["review_frequency"], art["risk_if_not_implemented"], "released", 1, 0, rts, rts),
+        )
+        oid = f"AI-ART-{art['article_number']:03d}-001"
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO regulation_obligations(obligation_id,article_id,source_reference,obligation_summary,mandatory_action,responsible_party,compliance_domain,evidence_required,implementation_guidance,risk_level,review_frequency,status,reviewer_role,approver_role,comments,published_to_product_managers,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                oid, art["article_id"], art["article_reference"], art["summary"],
+                "Document obligation ownership and execute the required control activities.",
+                "Compliance Officer / AI System Owner", art["control_domain"], art["required_evidence"],
+                "Define workflow, assign owner, approve controls, track periodic review evidence.",
+                "high" if art["article_number"] % 4 == 0 else "medium", art["review_frequency"],
+                "under_review", "risk_officer", "compliance_officer", "", 0, rts, rts
+            ),
         )
 
     conn.commit()
@@ -647,6 +692,24 @@ class Handler(BaseHTTPRequestHandler):
             rows = conn.execute(f"SELECT * FROM regulation_articles WHERE {sql_where} ORDER BY article_number LIMIT ? OFFSET ?", vals + [page_size, (page-1)*page_size]).fetchall()
             domains = conn.execute("SELECT DISTINCT control_domain FROM regulation_articles ORDER BY control_domain").fetchall()
             return self._json({"items":[dict(x) for x in rows], "total": total, "page": page, "page_size": page_size, "can_manage": can_manage(ctx), "filter_options":{"domains":[x["control_domain"] for x in domains]}})
+        if parsed.path == "/api/regulation-overview":
+            total_articles = conn.execute("SELECT COUNT(*) c FROM regulation_articles WHERE is_soft_deleted=0").fetchone()["c"]
+            total_chapters = conn.execute("SELECT COUNT(DISTINCT chapter_number) c FROM regulation_articles WHERE is_soft_deleted=0").fetchone()["c"]
+            total_obligations = conn.execute("SELECT COUNT(*) c FROM regulation_obligations").fetchone()["c"]
+            high_risk = conn.execute("SELECT COUNT(*) c FROM regulation_obligations WHERE risk_level='high'").fetchone()["c"]
+            published = conn.execute("SELECT COUNT(*) c FROM regulation_obligations WHERE published_to_product_managers=1").fetchone()["c"]
+            pending_review = conn.execute("SELECT COUNT(*) c FROM regulation_obligations WHERE status IN ('draft','under_review')").fetchone()["c"]
+            evidence_pending = conn.execute("SELECT COUNT(*) c FROM regulation_obligations WHERE status='evidence_pending'").fetchone()["c"]
+            evidence_done = conn.execute("SELECT COUNT(*) c FROM regulation_obligations WHERE status='evidence_provided'").fetchone()["c"]
+            chapters = conn.execute("SELECT chapter_number, chapter_title, COUNT(*) article_count FROM regulation_articles GROUP BY chapter_number, chapter_title ORDER BY chapter_number").fetchall()
+            return self._json({"regulation_name": REGULATION_NAME, "source_url": SOURCE_URL, "summary": {"total_chapters": total_chapters, "total_articles": total_articles, "total_obligations": total_obligations, "high_risk_obligations": high_risk, "published_requirements": published, "pending_review": pending_review, "evidence_pending": evidence_pending, "evidence_completed": evidence_done}, "chapters":[dict(x) for x in chapters]})
+        if parsed.path == "/api/regulation-article-detail":
+            article_id = parse_qs(parsed.query).get("article_id", [""])[0]
+            article = conn.execute("SELECT * FROM regulation_articles WHERE article_id=?", (article_id,)).fetchone()
+            if not article:
+                return self._json({"error":"Not found"}, 404)
+            obligations = conn.execute("SELECT * FROM regulation_obligations WHERE article_id=? ORDER BY obligation_id", (article_id,)).fetchall()
+            return self._json({"article": dict(article), "obligations":[dict(x) for x in obligations]})
 
         if parsed.path == "/api/audit":
             if not can_manage(ctx):
@@ -703,6 +766,32 @@ class Handler(BaseHTTPRequestHandler):
                 conn.execute("UPDATE regulation_articles SET status='released', is_visible_to_general_users=1, updated_at=? WHERE article_id=?", (now, aid))
             conn.commit()
             return self._json({"ok": True, "updated": len(ids)})
+        if self.path == "/api/regulation-obligations/status":
+            conn, ctx = self._require_auth()
+            if not conn:
+                return
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            oid = payload.get("obligation_id","")
+            status = payload.get("status","").lower()
+            comments = payload.get("comments","")
+            manager_statuses = {"draft","under_review","approved","released_visible","evidence_pending","evidence_provided","deprecated"}
+            pm_statuses = {"reviewed_by_product_manager","committed"}
+            if can_manage(ctx):
+                if status not in manager_statuses:
+                    return self._json({"error":"Invalid status"}, HTTPStatus.BAD_REQUEST)
+                pub = 1 if status == "released_visible" else 0
+                conn.execute("UPDATE regulation_obligations SET status=?, comments=?, published_to_product_managers=?, updated_at=? WHERE obligation_id=?", (status, comments, pub, now_iso(), oid))
+            elif is_product_manager(ctx):
+                if status not in pm_statuses:
+                    return self._json({"error":"Invalid PM status"}, HTTPStatus.BAD_REQUEST)
+                row = conn.execute("SELECT published_to_product_managers FROM regulation_obligations WHERE obligation_id=?", (oid,)).fetchone()
+                if not row or row["published_to_product_managers"] != 1:
+                    return self._json({"error":"Forbidden"}, HTTPStatus.FORBIDDEN)
+                conn.execute("UPDATE regulation_obligations SET status=?, comments=?, updated_at=? WHERE obligation_id=?", (status, comments, now_iso(), oid))
+            else:
+                return self._json({"error":"Forbidden"}, HTTPStatus.FORBIDDEN)
+            conn.commit()
+            return self._json({"ok":True})
 
         conn, ctx = self._require_auth()
         if not conn:

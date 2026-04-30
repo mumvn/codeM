@@ -72,13 +72,41 @@ def build_all_articles():
         "Access Control", "Documentation Obligations", "AI Governance",
         "Model Risk Management", "Transparency and Explainability", "Human Oversight",
     ]
+    chapters = [
+        (1, "General Provisions"), (2, "Prohibited Practices"), (3, "High-Risk AI Systems"),
+        (4, "Transparency"), (5, "Governance"), (6, "Conformity and Market Monitoring"),
+        (7, "Remedies and Penalties"), (8, "Final Provisions"),
+    ]
+    def chapter_for_article(n):
+        if n <= 8: return chapters[0]
+        if n <= 15: return chapters[1]
+        if n <= 50: return chapters[2]
+        if n <= 60: return chapters[3]
+        if n <= 80: return chapters[4]
+        if n <= 100: return chapters[5]
+        if n <= 110: return chapters[6]
+        return chapters[7]
     for i in range(1, 114):
+        ch_num, ch_title = chapter_for_article(i)
+        plain = (
+            f"Article {i} requires the organization to define accountable ownership, maintain documented controls, "
+            f"and evidence that regulatory duties are executed consistently across AI and digital operational resilience processes."
+        )
         rows.append({
             "article_id": f"ART-{i:03d}",
             "article_number": i,
             "article_reference": f"Article {i}",
-            "title": f"EU AI/DORA Article {i}",
-            "summary": f"Structured compliance representation for Article {i}.",
+            "chapter_number": ch_num,
+            "chapter_title": ch_title,
+            "title": f"Article {i} — {ch_title} obligations",
+            "summary": plain,
+            "why_it_matters": "Non-compliance can lead to legal exposure, supervisory findings, service disruption, and reputational damage.",
+            "affected_roles": "Compliance Officer, Risk Officer, AI System Owner, Product Manager, Security Lead",
+            "required_org_actions": "Define policy, assign accountable owner, approve control design, schedule periodic review.",
+            "required_technical_actions": "Implement monitoring, logging, access control, and incident traceability for impacted systems.",
+            "required_evidence": "Policy document, control checklist, risk assessment, approval log, review records.",
+            "review_frequency": "Quarterly",
+            "risk_if_not_implemented": "High risk of regulatory non-compliance and control failure.",
             "control_domain": domains[(i - 1) % len(domains)],
         })
     return rows

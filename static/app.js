@@ -1,4 +1,4 @@
-const state = { functionId:null,functionName:'',functionDef:'',page:1,pageSize:12,categoryCode:'',subcategoryCode:'',controlId:'',search:'',status:'',sortBy:'control_id',sortDir:'asc',total:0,canManage:false,isProductManager:false,canDashboard:false,selected:new Set(),regPage:1,regPageSize:25,regSelected:new Set(),regTotal:0 };
+const state = { functionId:null,functionName:'',functionDef:'',page:1,pageSize:12,categoryCode:'',subcategoryCode:'',controlId:'',search:'',status:'',sortBy:'control_id',sortDir:'asc',total:0,canManage:false,isProductManager:false,canDashboard:false,selected:new Set(),regPage:1,regPageSize:25,regSelected:new Set(),regTotal:0,regArticleId:'' };
 const charts = { pie:null, bar:null, trend:null };
 
 async function api(path, opts={}) { const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'include',...opts}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
@@ -85,16 +85,30 @@ async function loadDashboard(){
 function resetDashboardFilters(){ ['dashPm','dashFunction','dashCategory','dashSubcategory','dashStatus','dashStart','dashEnd'].forEach(id=>document.getElementById(id).value=''); loadDashboard(); }
 
 async function loadRegulation(){
+  const overview = await api('/api/regulation-overview');
   const q=new URLSearchParams({search:document.getElementById('regSearch').value.trim(),domain:document.getElementById('regDomain').value,page:state.regPage,page_size:state.regPageSize});
   const data=await api(`/api/regulation-articles?${q.toString()}`);
   state.regTotal=data.total;
-  document.getElementById('regMeta').innerHTML=`AI / DORA Regulation Explorer · 113 Articles`;
+  document.getElementById('regMeta').innerHTML=`${overview.regulation_name} · <a href="${overview.source_url}" target="_blank">EUR-Lex Source</a>`;
+  const s=overview.summary;
+  document.getElementById('regOverviewCards').innerHTML=`<div class='sum-card'><b>Total chapters</b><span>${s.total_chapters}</span></div><div class='sum-card'><b>Total articles</b><span>${s.total_articles}</span></div><div class='sum-card'><b>Total obligations</b><span>${s.total_obligations}</span></div><div class='sum-card'><b>High-risk obligations</b><span>${s.high_risk_obligations}</span></div><div class='sum-card'><b>Published requirements</b><span>${s.published_requirements}</span></div><div class='sum-card'><b>Pending review</b><span>${s.pending_review}</span></div><div class='sum-card'><b>Evidence pending</b><span>${s.evidence_pending}</span></div><div class='sum-card'><b>Evidence completed</b><span>${s.evidence_completed}</span></div>`;
+  document.getElementById('regChapterNav').innerHTML=overview.chapters.map(c=>`<span class='badge'>Chapter ${c.chapter_number}: ${c.chapter_title} (${c.article_count})</span>`).join(' ');
   fillSelectOptions(document.getElementById('regDomain'), data.filter_options.domains.map(d=>({v:d})), 'v', x=>x.v, 'All Domains');
-  document.getElementById('regSummary').innerHTML=`<div class='sum-card'><b>Total articles</b><span>${data.total}</span></div><div class='sum-card'><b>Selected</b><span>${state.regSelected.size}</span></div>`;
   const rows=document.getElementById('regRows'); rows.innerHTML='';
-  data.items.forEach(r=>{const selectCell=state.canManage?`<td><input type="checkbox" data-aid="${r.article_id}" ${state.regSelected.has(r.article_id)?'checked':''}></td>`:''; const tr=document.createElement('tr'); tr.innerHTML=`${selectCell}<td>${r.article_id}</td><td>${r.article_reference}</td><td>${r.control_domain||''}</td><td><b>${r.title}</b><div class='muted small'>${r.summary}</div></td><td>Compliance Officer</td><td>Medium</td><td>${statusBadge(r.status)}</td><td>Policy mapping, approvals, test evidence.</td>`; rows.appendChild(tr);});
+  data.items.forEach(r=>{const selectCell=state.canManage?`<td><input type="checkbox" data-aid="${r.article_id}" ${state.regSelected.has(r.article_id)?'checked':''}></td>`:''; const tr=document.createElement('tr'); tr.innerHTML=`${selectCell}<td><button class="link-btn" data-open-article="${r.article_id}">${r.article_reference}</button></td><td>${r.title}</td><td>${r.control_domain||''}</td>`; rows.appendChild(tr);});
   rows.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.onchange=e=>{const id=e.target.getAttribute('data-aid'); e.target.checked?state.regSelected.add(id):state.regSelected.delete(id);});
+  rows.querySelectorAll('button[data-open-article]').forEach(btn=>btn.onclick=()=>openRegArticle(btn.getAttribute('data-open-article')));
   const max=Math.max(1,Math.ceil(state.regTotal/state.regPageSize)); document.getElementById('regMetaPage').textContent=`Page ${state.regPage}/${max} • ${state.regTotal} articles`;
+}
+
+async function openRegArticle(articleId){
+  state.regArticleId=articleId;
+  const d=await api(`/api/regulation-article-detail?article_id=${encodeURIComponent(articleId)}`);
+  const a=d.article;
+  document.getElementById('regArticleDetail').innerHTML=`<h4>${a.article_reference} — ${a.title}</h4><p>${a.summary}</p><p><b>Why it matters:</b> ${a.why_it_matters}</p><p><b>Who is affected:</b> ${a.affected_roles}</p><p><b>Required organizational actions:</b> ${a.required_org_actions}</p><p><b>Required technical actions:</b> ${a.required_technical_actions}</p><p><b>Required evidence:</b> ${a.required_evidence}</p><p><b>Review frequency:</b> ${a.review_frequency}</p><p><b>Risk if not implemented:</b> ${a.risk_if_not_implemented}</p>`;
+  document.getElementById('regObligations').innerHTML=d.obligations.map(o=>`<div class='card'><b>${o.obligation_id}</b> · ${o.source_reference}<p>${o.obligation_summary}</p><p><b>Mandatory action:</b> ${o.mandatory_action}</p><p><b>Responsible:</b> ${o.responsible_party}</p><p><b>Evidence:</b> ${o.evidence_required}</p><p><b>Guidance:</b> ${o.implementation_guidance}</p><p><b>Risk:</b> ${o.risk_level}</p><p><b>Status:</b> ${o.status}</p><select id='st-${o.obligation_id}'><option value='draft'>Draft</option><option value='under_review'>Under Review</option><option value='approved'>Approved</option><option value='released_visible'>Released / Visible</option><option value='reviewed_by_product_manager'>Reviewed by Product Manager</option><option value='committed'>Committed</option><option value='evidence_pending'>Evidence Pending</option><option value='evidence_provided'>Evidence Provided</option><option value='deprecated'>Deprecated</option></select><input id='cm-${o.obligation_id}' placeholder='comments' value='${o.comments||''}'/><button class='link-btn' data-save-ob='${o.obligation_id}'>Save Workflow</button></div>`).join('');
+  d.obligations.forEach(o=>{const el=document.getElementById(`st-${o.obligation_id}`); if(el) el.value=o.status;});
+  document.querySelectorAll('button[data-save-ob]').forEach(btn=>btn.onclick=async()=>{const oid=btn.getAttribute('data-save-ob');await api('/api/regulation-obligations/status',{method:'POST',body:JSON.stringify({obligation_id:oid,status:document.getElementById(`st-${oid}`).value,comments:document.getElementById(`cm-${oid}`).value})});openRegArticle(articleId);loadRegulation();});
 }
 
 async function bootstrap(){
