@@ -206,6 +206,10 @@ def init_db():
     r_map = {r["name"]: r["id"] for r in cur.execute("SELECT id,name FROM roles")}
 
     users = [
+        ("admin", "password123", "compliance_officer"),
+        ("compliance_user", "password123", "risk_officer"),
+        ("product_manager", "password123", "product_manager"),
+        ("viewer_user", "password123", "readonly_user"),
         ("alice", "password123", "compliance_officer"),
         ("ravi", "password123", "risk_officer"),
         ("priya", "password123", "product_manager"),
@@ -708,7 +712,10 @@ class Handler(BaseHTTPRequestHandler):
             article = conn.execute("SELECT * FROM regulation_articles WHERE article_id=?", (article_id,)).fetchone()
             if not article:
                 return self._json({"error":"Not found"}, 404)
-            obligations = conn.execute("SELECT * FROM regulation_obligations WHERE article_id=? ORDER BY obligation_id", (article_id,)).fetchall()
+            if can_manage(ctx):
+                obligations = conn.execute("SELECT * FROM regulation_obligations WHERE article_id=? ORDER BY obligation_id", (article_id,)).fetchall()
+            else:
+                obligations = conn.execute("SELECT * FROM regulation_obligations WHERE article_id=? AND published_to_product_managers=1 ORDER BY obligation_id", (article_id,)).fetchall()
             return self._json({"article": dict(article), "obligations":[dict(x) for x in obligations]})
 
         if parsed.path == "/api/audit":
