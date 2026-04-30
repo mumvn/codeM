@@ -732,7 +732,13 @@ class Handler(BaseHTTPRequestHandler):
                 obligations = conn.execute("SELECT * FROM regulation_obligations WHERE article_id=? ORDER BY obligation_id", (article_id,)).fetchall()
             else:
                 obligations = conn.execute("SELECT * FROM regulation_obligations WHERE article_id=? AND published_to_product_managers=1 ORDER BY obligation_id", (article_id,)).fetchall()
-            return self._json({"article": dict(article), "obligations":[dict(x) for x in obligations]})
+            out = []
+            for o in obligations:
+                d = dict(o)
+                if not can_manage(ctx):
+                    d["comments"] = ""
+                out.append(d)
+            return self._json({"article": dict(article), "obligations": out})
 
         if parsed.path == "/api/audit":
             if not can_manage(ctx):

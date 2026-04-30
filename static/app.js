@@ -1,5 +1,6 @@
 const state = { functionId:null,functionName:'',functionDef:'',page:1,pageSize:12,categoryCode:'',subcategoryCode:'',controlId:'',search:'',status:'',sortBy:'control_id',sortDir:'asc',total:0,canManage:false,isProductManager:false,canDashboard:false,selected:new Set(),regPage:1,regPageSize:25,regSelected:new Set(),regTotal:0,regArticleId:'' };
 const charts = { pie:null, bar:null, trend:null };
+let lastFocused = null;
 
 async function api(path, opts={}) { const r=await fetch(path,{headers:{'Content-Type':'application/json'},credentials:'include',...opts}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
 const showView=id=>['homeView','controlView','dashboardView','regulationView'].forEach(v=>document.getElementById(v).hidden=v!==id);
@@ -105,12 +106,40 @@ async function openRegArticle(articleId){
   state.regArticleId=articleId;
   const d=await api(`/api/regulation-article-detail?article_id=${encodeURIComponent(articleId)}`);
   const a=d.article;
-  document.getElementById('regArticleDetail').innerHTML=`<h4>${a.article_reference} — ${a.title}</h4><p>${a.summary}</p><p><b>Why it matters:</b> ${a.why_it_matters}</p><p><b>Who is affected:</b> ${a.affected_roles}</p><p><b>Required organizational actions:</b> ${a.required_org_actions}</p><p><b>Required technical actions:</b> ${a.required_technical_actions}</p><p><b>Required evidence:</b> ${a.required_evidence}</p><p><b>Review frequency:</b> ${a.review_frequency}</p><p><b>Risk if not implemented:</b> ${a.risk_if_not_implemented}</p>`;
   const optsManager = `<option value='draft'>Draft</option><option value='under_review'>Under Review</option><option value='approved'>Approved</option><option value='released_visible'>Released / Visible</option><option value='evidence_pending'>Evidence Pending</option><option value='evidence_provided'>Evidence Provided</option><option value='deprecated'>Deprecated</option>`;
   const optsPm = `<option value='reviewed_by_product_manager'>Reviewed by Product Manager</option><option value='committed'>Committed</option>`;
-  document.getElementById('regObligations').innerHTML=d.obligations.map(o=>{const editable=(state.canManage||state.isProductManager);const opts=state.canManage?optsManager:optsPm;const ctl=editable?`<select id='st-${o.obligation_id}'>${opts}</select><input id='cm-${o.obligation_id}' placeholder='comments' value='${o.comments||''}'/><button class='link-btn' data-save-ob='${o.obligation_id}'>Save Workflow</button>`:`<p class='muted'>Read-only</p>`;return `<div class='card'><b>${o.obligation_id}</b> · ${o.source_reference}<p>${o.obligation_summary}</p><p><b>Mandatory action:</b> ${o.mandatory_action}</p><p><b>Responsible:</b> ${o.responsible_party}</p><p><b>Evidence:</b> ${o.evidence_required}</p><p><b>Guidance:</b> ${o.implementation_guidance}</p><p><b>Risk:</b> ${o.risk_level}</p><p><b>Status:</b> ${o.status}</p>${ctl}</div>`;}).join('');
+  document.getElementById('regObligations').innerHTML=d.obligations.map(o=>{
+    const editable=(state.canManage||state.isProductManager);const opts=state.canManage?optsManager:optsPm;
+    const ctl=editable?`<select id='st-${o.obligation_id}'>${opts}</select><input id='cm-${o.obligation_id}' placeholder='comments' value='${o.comments||''}'/><button class='link-btn' data-save-ob='${o.obligation_id}'>Save Workflow</button>`:`<p class='muted'>Read-only</p>`;
+    return `<div class='card'><b>${o.obligation_id}</b> · ${o.source_reference}<p>${o.obligation_summary}</p><button class='link-btn' data-view-evidence='${o.obligation_id}'>View Evidence</button>${ctl}</div>`;
+  }).join('');
   d.obligations.forEach(o=>{const el=document.getElementById(`st-${o.obligation_id}`); if(el){ if([...(el.options||[])].some(x=>x.value===o.status)) el.value=o.status; else el.selectedIndex=0; }});
   document.querySelectorAll('button[data-save-ob]').forEach(btn=>btn.onclick=async()=>{const oid=btn.getAttribute('data-save-ob');await api('/api/regulation-obligations/status',{method:'POST',body:JSON.stringify({obligation_id:oid,status:document.getElementById(`st-${oid}`).value,comments:document.getElementById(`cm-${oid}`).value})});openRegArticle(articleId);loadRegulation();});
+  document.querySelectorAll('button[data-view-evidence]').forEach(btn=>btn.onclick=()=>showObligationModal(d.obligations.find(x=>x.obligation_id===btn.getAttribute('data-view-evidence'))));
+  showArticleModal(a, d.obligations);
+}
+
+function openModal(title, html){
+  const overlay=document.getElementById('modalOverlay');
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML=html;
+  lastFocused=document.activeElement;
+  overlay.hidden=false;
+  document.body.style.overflow='hidden';
+  document.getElementById('modalCloseBtn').focus();
+}
+function closeModal(){
+  const overlay=document.getElementById('modalOverlay');
+  overlay.hidden=true;
+  document.body.style.overflow='';
+  if(lastFocused && lastFocused.focus) lastFocused.focus();
+}
+function showArticleModal(article, obligations){
+  const keys=obligations.map(o=>`<li>${o.obligation_id}: ${o.obligation_summary}</li>`).join('');
+  openModal(`${article.article_reference} Explanation`, `<h4>${article.title}</h4><p>${article.summary}</p><p><b>Why this article matters:</b> ${article.why_it_matters}</p><p><b>Who is affected:</b> ${article.affected_roles}</p><p><b>Required organizational actions:</b> ${article.required_org_actions}</p><p><b>Required technical actions:</b> ${article.required_technical_actions}</p><p><b>Related compliance domain:</b> ${article.control_domain}</p><p><b>Risk if not implemented:</b> ${article.risk_if_not_implemented}</p><p><b>Source:</b> ${article.article_reference}</p><h4>Key obligations</h4><ul>${keys}</ul>`);
+}
+function showObligationModal(o){
+  openModal(`${o.obligation_id} Evidence`, `<p><b>Source article:</b> ${o.source_reference}</p><p><b>Obligation summary:</b> ${o.obligation_summary}</p><p><b>Mandatory action:</b> ${o.mandatory_action}</p><p><b>Responsible role:</b> ${o.responsible_party}</p><p><b>Compliance domain:</b> ${o.compliance_domain}</p><p><b>Evidence required:</b> ${o.evidence_required}</p><p><b>Example artifacts:</b> Policy file, approval record, review log, issue tracker export.</p><p><b>Implementation guidance:</b> ${o.implementation_guidance}</p><p><b>Review frequency:</b> ${o.review_frequency}</p><p><b>Current status:</b> ${o.status}</p><p><b>Reviewer/Approver:</b> ${o.reviewer_role || '-'} / ${o.approver_role || '-'}</p><p><b>Comments:</b> ${o.comments || '-'}</p>`);
 }
 
 async function bootstrap(){
@@ -148,6 +177,9 @@ document.getElementById('regSelectAll').onclick=async()=>{const d=await api('/ap
 document.getElementById('regReleaseSelected').onclick=async()=>{if(!state.regSelected.size) return; await api('/api/regulation-articles/bulk-release',{method:'POST',body:JSON.stringify({article_ids:Array.from(state.regSelected)})}); state.regSelected.clear(); loadRegulation();};
 document.getElementById('regPrev').onclick=()=>{if(state.regPage>1){state.regPage--;loadRegulation();}};
 document.getElementById('regNext').onclick=()=>{const max=Math.max(1,Math.ceil(state.regTotal/state.regPageSize));if(state.regPage<max){state.regPage++;loadRegulation();}};
+document.getElementById('modalCloseBtn').onclick=closeModal;
+document.getElementById('modalOverlay').onclick=e=>{if(e.target.id==='modalOverlay') closeModal();};
+document.addEventListener('keydown', e=>{if(e.key==='Escape' && !document.getElementById('modalOverlay').hidden) closeModal();});
 
 document.getElementById('categoryFilter').onchange=e=>{state.categoryCode=e.target.value;state.page=1;loadControls();};
 document.getElementById('subcategoryFilter').onchange=e=>{state.subcategoryCode=e.target.value;state.page=1;loadControls();};

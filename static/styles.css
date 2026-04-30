@@ -39,3 +39,10 @@ button{cursor:pointer}button:hover{border-color:var(--accent)}.error{color:#fda4
 .timeline-row{display:grid;grid-template-columns:180px 1fr 130px;gap:10px;align-items:center;margin:8px 0}
 .tl-name{font-weight:600}.tl-bar{height:10px;background:#1e293b;border-radius:999px;overflow:hidden}.tl-bar span{display:block;height:100%;background:#22c55e}
 .tl-meta{font-size:.85rem;color:#9ca3af}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal-card{width:min(980px,92vw);max-height:86vh;overflow:auto;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:12px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#0f172a;padding-bottom:8px}
+.modal-body h4{margin:.5rem 0}
+.modal-body p{margin:.4rem 0}
+#modalCloseBtn{background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:6px 10px;cursor:pointer}

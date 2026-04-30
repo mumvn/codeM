@@ -164,14 +164,23 @@
       </div>
       <div class="reg-grid">
         <div class="chart-card"><h3>Chapter / Article Browser</h3><div id="regChapterNav"></div><div class="table-wrap"><table class="control-table"><thead><tr><th id="regSelectHead" hidden>Select</th><th>Article</th><th>Title</th><th>Domain</th></tr></thead><tbody id="regRows"></tbody></table></div></div>
-        <div class="chart-card"><h3>Article Explanation</h3><div id="regArticleDetail" class="muted">Select an article to view details.</div></div>
-        <div class="chart-card"><h3>Obligations & Evidence</h3><div id="regObligations"></div></div>
+        <div class="chart-card"><h3>Article Explanation</h3><div class="muted">Use <b>View Explanation</b> from the article list.</div></div>
+        <div class="chart-card"><h3>Obligations & Evidence</h3><div class="muted">Use <b>View Evidence</b> from article obligations.</div></div>
       </div>
       <div class="pager">
         <button id="regPrev">Prev</button><span id="regMetaPage"></span><button id="regNext">Next</button>
       </div>
     </section>
   </main>
+</div>
+<div id="modalOverlay" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-header">
+      <h3 id="modalTitle">Details</h3>
+      <button id="modalCloseBtn">✕</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/app.js"></script>
