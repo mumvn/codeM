@@ -256,7 +256,7 @@ def init_db():
             INSERT OR IGNORE INTO regulation_articles(article_id,article_number,article_reference,title,summary,control_domain,chapter_number,chapter_title,why_it_matters,affected_roles,required_org_actions,required_technical_actions,required_evidence,review_frequency,risk_if_not_implemented,status,is_visible_to_general_users,is_soft_deleted,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (art["article_id"], art["article_number"], art["article_reference"], art["title"], art["summary"], art["control_domain"], art["chapter_number"], art["chapter_title"], art["why_it_matters"], art["affected_roles"], art["required_org_actions"], art["required_technical_actions"], art["required_evidence"], art["review_frequency"], art["risk_if_not_implemented"], "released", 1, 0, rts, rts),
+            (art["article_id"], art["article_number"], art["article_reference"], art["title"], art["summary"], art["control_domain"], art["chapter_number"], art["chapter_title"], art["why_it_matters"], art["affected_roles"], art["required_org_actions"], art["required_technical_actions"], art["required_evidence"], art["review_frequency"], art["risk_if_not_implemented"], "draft", 0, 0, rts, rts),
         )
         oid = f"AI-ART-{art['article_number']:03d}-001"
         cur.execute(
