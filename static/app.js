@@ -20,6 +20,9 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 20
 camera.position.set(0, 5, 24);
 scene.add(new THREE.AmbientLight(0xffffff, 1.2));
 const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(20, 20, 20); scene.add(sun);
+const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshStandardMaterial({ color:'#ffd94d', emissive:'#ffb300', emissiveIntensity:0.6 }));
+sunMesh.position.set(0, 0, 0);
+scene.add(sunMesh);
 
 const starGeo = new THREE.BufferGeometry();
 const starPos = new Float32Array(1200 * 3);
@@ -50,7 +53,8 @@ const planets = PLANETS.map((p,i)=>{
 });
 
 let state = 'welcome', countdown = 10, lastTick = 0, phaseTime = 0, planetIndex = 0, landingMsg = '', speedState='Good';
-let rocketVel = 0, landingX = 0, landingY = 16;
+let landingX = 0, landingY = 16;
+let orbitAngle = 0, orbitPlanetIndex = 0, orbitPaused = false, orbitSpeed = 1, orbitRadius = 6;
 const key = {};
 addEventListener('keydown', e=> key[e.key] = true);
 addEventListener('keyup', e=> key[e.key] = false);
@@ -66,6 +70,41 @@ function landingControls(){
 overlay.addEventListener('pointerdown',e=>{ const k=e.target.dataset.k; if(k) key[k]=true; });
 overlay.addEventListener('pointerup',e=>{ const k=e.target.dataset.k; if(k) key[k]=false; });
 overlay.addEventListener('pointercancel',()=>{ Object.keys(key).forEach(k=> key[k]=false); });
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+function spaceControls(){
+  return `<div class="hud"><div class="badge">Planet: ${planets[orbitPlanetIndex].name}</div><div class="badge">${planets[orbitPlanetIndex].fact}</div></div>
+  <div class="controls" style="grid-template-columns:repeat(3,minmax(96px,130px));">
+    <button id="pauseBtn">${orbitPaused ? 'Resume' : 'Pause'}</button>
+    <button id="slowBtn">Slower</button>
+    <button id="fastBtn">Faster</button>
+  </div>
+  <div class="top-message">Tap a planet to orbit it! ☀️ Sun stays in view.</div>`;
+}
+
+function bindSpaceButtons(){
+  const p=document.getElementById('pauseBtn'); const sl=document.getElementById('slowBtn'); const f=document.getElementById('fastBtn');
+  if(p) p.onclick=()=>{ orbitPaused=!orbitPaused; };
+  if(sl) sl.onclick=()=>{ orbitSpeed=Math.max(0.4, orbitSpeed-0.2); };
+  if(f) f.onclick=()=>{ orbitSpeed=Math.min(3, orbitSpeed+0.2); };
+}
+
+canvas.addEventListener('pointerdown', (event)=>{
+  if(state!=='space') return;
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(planets.map(p=>p.mesh));
+  if(hits.length){
+    const mesh = hits[0].object;
+    const idx = planets.findIndex(p=>p.mesh===mesh);
+    if(idx>=0){ orbitPlanetIndex = idx; orbitAngle = 0; }
+  }
+});
+
 
 function animate(t){
   requestAnimationFrame(animate);
@@ -89,15 +128,30 @@ function animate(t){
   }
 
   if(state==='space'){
-    const target = planets[planetIndex]?.mesh;
-    if(target){
-      rocket.position.lerp(new THREE.Vector3(target.position.x - 4, target.position.y + 2, target.position.z + 6), 0.02);
-      camera.position.lerp(new THREE.Vector3(rocket.position.x + 8, rocket.position.y + 4, rocket.position.z + 12), 0.03);
-      camera.lookAt(rocket.position);
-      const d = rocket.position.distanceTo(target.position);
-      ui(`<div class="hud"><div class="badge">Planet: ${planets[planetIndex].name}</div><div class="badge">${planets[planetIndex].fact}</div></div>`);
-      if(d < 6){ planetIndex++; if (planetIndex>=planets.length){ state='gohome'; ui(`<div class="panel"><h2 class="big">You reached Neptune! 🌟</h2><button id="homeBtn">Go Home</button></div>`); setTimeout(()=>{const b=document.getElementById('homeBtn'); if(b)b.onclick=()=>{state='return';};},0);} }
+    // Continuous smooth orbit loop around the selected planet.
+    if(!orbitPaused) orbitAngle += 0.02 * orbitSpeed;
+    const current = planets[orbitPlanetIndex];
+    const center = current.mesh.position;
+    const ellipseX = orbitRadius + Math.sin(phaseTime * 0.5) * 0.8;
+    const ellipseZ = orbitRadius * 0.7;
+    rocket.position.set(
+      center.x + Math.cos(orbitAngle) * ellipseX,
+      center.y + 2 + Math.sin(orbitAngle * 0.6) * 1.2,
+      center.z + Math.sin(orbitAngle) * ellipseZ,
+    );
+    rocket.lookAt(center);
+
+    // Keep Sun visible by locking the camera to always look at Sun center.
+    camera.position.lerp(new THREE.Vector3(35, 22, 55), 0.04);
+    camera.lookAt(sunMesh.position);
+
+    // Auto-cycle planets in a loop so rocket never stops at Mercury.
+    if(!orbitPaused && Math.abs(Math.sin(orbitAngle)) < 0.015){
+      orbitPlanetIndex = (orbitPlanetIndex + 1) % planets.length;
     }
+
+    ui(spaceControls());
+    bindSpaceButtons();
   }
 
   if(state==='return'){
