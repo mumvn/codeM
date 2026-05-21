@@ -3,68 +3,20 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>NIST CSF 2.0 Hierarchy Explorer</title>
-  <link rel="stylesheet" href="/styles.css"/>
+  <title>Little Rocket Explorer</title>
+  <link rel="stylesheet" href="./styles.css"/>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
-<div class="app">
-  <header>
-    <div>
-      <h1>NIST Cybersecurity Framework 2.0</h1>
-      <p class="subtitle">Hierarchy: Function → Category → Subcategory → Control</p>
-    </div>
-    <div id="profile"></div>
-    <button id="logoutBtn" hidden>Logout</button>
-  </header>
-
-  <section id="loginCard" class="card">
-    <h2>Sign in</h2>
-    <p>Demo users: alice, ravi, priya, ops1 (password: <code>password123</code>)</p>
-    <div class="form-row">
-      <input id="username" placeholder="username" />
-      <input id="password" type="password" placeholder="password" />
-      <button id="loginBtn">Login</button>
-    </div>
-    <p id="loginErr" class="error"></p>
-  </section>
-
-  <main id="main" hidden>
-    <section class="layout">
-      <aside class="card" id="sidebar">
-        <h2>Framework Tree</h2>
-        <p class="muted">Expandable definitions at every level.</p>
-        <div id="tree"></div>
-      </aside>
-
-      <section class="card">
-        <h2 id="selectionTitle">Choose a function or category</h2>
-        <p id="selectionDef" class="muted"></p>
-        <div class="toolbar">
-          <input id="search" placeholder="Search subcategories/controls" />
-          <select id="sortBy">
-            <option value="subcategory_code">Sort: Subcategory Code</option>
-            <option value="subcategory_name">Sort: Subcategory Name</option>
-            <option value="control_code">Sort: Control Code</option>
-          </select>
-          <select id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Function</th><th>Category</th><th>Subcategory</th><th>Subcategory Definition</th><th>Control</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-        <div class="pager">
-          <button id="prev">Prev</button>
-          <span id="pageMeta"></span>
-          <button id="next">Next</button>
-        </div>
-      </section>
-    </section>
-  </main>
-</div>
-<script src="/app.js"></script>
+  <div id="overlay"></div>
+  <canvas id="game"></canvas>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
