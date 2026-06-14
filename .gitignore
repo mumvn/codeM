@@ -1,3 +1,8 @@
+.env
+.venv/
 __pycache__/
-*.pyc
-csf.db
+.pytest_cache/
+*.py[cod]
+*.db
+*.db-shm
+*.db-wal

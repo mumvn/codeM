@@ -1,42 +1,49 @@
-# NIST CSF 2.0 Hierarchy Explorer
+# Microsoft AI Architecture Digest
 
-## Understanding Confirmed
-This implementation is based on **NIST CSWP 29 (NIST Cybersecurity Framework 2.0, February 26, 2024)** and models the full hierarchy on the homepage:
+A secure FastAPI and SQLite dashboard that aggregates five curated Microsoft AI RSS feeds across the Platform, Orchestration, and End-User layers. New feed entries are cleaned, summarized by Google Gemini into exactly five architecture-focused lines, and cached locally.
 
-**Function → Category → Subcategory → Control**
+## Architecture
 
-- Functions: GV, ID, PR, DE, RS, RC.
-- Categories: all CSF 2.0 core categories (22 total).
-- Subcategories: all CSF 2.0 core outcomes (106 total) with definitions from the framework Appendix A structure.
-- Controls: mapped per subcategory as NIST CSF 2.0 core control records.
+- **Backend:** FastAPI with a shared asynchronous HTTP client and security headers.
+- **Persistence:** SQLite in WAL mode with a unique article-link constraint.
+- **Feed pipeline:** `feedparser` plus Beautiful Soup HTML sanitization.
+- **LLM:** Google Gemini `gemini-2.5-flash`; the API key remains server-side.
+- **Frontend:** Responsive HTML, CSS, and vanilla JavaScript dashboard.
 
-## Database Schema
-- `functions(id, code, name, description)`
-- `categories(id, code, function_id, name, description)`
-- `subcategories(id, code, category_id, name, definition)`
-- `controls(id, subcategory_id, control_code, control_type, details)`
-- `functional_groups(id, name, description)`
-- `roles(id, name, access_level, functional_group_id)`
-- `users(id, username, password_hash, role_id)`
-- `role_category_permissions(role_id, category_id)`
+## Setup
 
-## UI Flow
-1. Login using role-based demo users.
-2. Homepage displays an expandable/collapsible tree.
-3. Each **Function** node shows function definition and child categories.
-4. Each **Category** node shows category definition and all subcategory definitions.
-5. Clicking a function loads all permitted categories/subcategories/controls under that function.
-6. Clicking a category loads that category's subcategories/controls in table format.
-7. Search, sorting, and pagination operate on returned control rows.
-
-## Run
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env and set LLM_API_KEY
 python app.py
 ```
-Open: `http://localhost:8000`
 
-Demo accounts:
-- `alice` / `password123` (Compliance Officer)
-- `ravi` / `password123` (Risk Officer)
-- `priya` / `password123` (IT Product Manager)
-- `ops1` / `password123` (Technical Operations)
+Open <http://127.0.0.1:8000>. API documentation is available at <http://127.0.0.1:8000/docs>.
+
+## API
+
+- `GET /api/articles` returns cached articles, newest first. Optional query parameters: `category` and `limit`.
+- `POST /api/sync` fetches all configured feeds, skips existing links, generates summaries for new entries, and returns per-feed results.
+- `GET /health` provides a lightweight health response.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LLM_API_KEY` | none | Required Google Gemini API key. |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model used for summaries. |
+| `DATABASE_PATH` | `architecture_digest.db` | SQLite database location. |
+| `REQUEST_TIMEOUT_SECONDS` | `30` | Feed and Gemini request timeout. |
+| `MAX_ARTICLE_CHARS` | `20000` | Maximum description characters sent to Gemini. |
+
+Secrets in `.env` and local database files are excluded from version control.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```

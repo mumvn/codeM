@@ -1,70 +1,84 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>NIST CSF 2.0 Hierarchy Explorer</title>
-  <link rel="stylesheet" href="/styles.css"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Enterprise architecture intelligence across the Microsoft AI stack.">
+  <title>Microsoft AI Architecture Digest</title>
+  <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
-<div class="app">
-  <header>
-    <div>
-      <h1>NIST Cybersecurity Framework 2.0</h1>
-      <p class="subtitle">Hierarchy: Function → Category → Subcategory → Control</p>
-    </div>
-    <div id="profile"></div>
-    <button id="logoutBtn" hidden>Logout</button>
-  </header>
-
-  <section id="loginCard" class="card">
-    <h2>Sign in</h2>
-    <p>Demo users: alice, ravi, priya, ops1 (password: <code>password123</code>)</p>
-    <div class="form-row">
-      <input id="username" placeholder="username" />
-      <input id="password" type="password" placeholder="password" />
-      <button id="loginBtn">Login</button>
-    </div>
-    <p id="loginErr" class="error"></p>
-  </section>
-
-  <main id="main" hidden>
-    <section class="layout">
-      <aside class="card" id="sidebar">
-        <h2>Framework Tree</h2>
-        <p class="muted">Expandable definitions at every level.</p>
-        <div id="tree"></div>
-      </aside>
-
-      <section class="card">
-        <h2 id="selectionTitle">Choose a function or category</h2>
-        <p id="selectionDef" class="muted"></p>
-        <div class="toolbar">
-          <input id="search" placeholder="Search subcategories/controls" />
-          <select id="sortBy">
-            <option value="subcategory_code">Sort: Subcategory Code</option>
-            <option value="subcategory_name">Sort: Subcategory Name</option>
-            <option value="control_code">Sort: Control Code</option>
-          </select>
-          <select id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select>
+  <div class="shell">
+    <header class="hero">
+      <div class="brand-row">
+        <a class="brand" href="/" aria-label="Microsoft AI Architecture Digest home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span>Microsoft AI</span>
+        </a>
+        <span class="status"><span class="status-dot"></span> Architecture intelligence</span>
+      </div>
+      <div class="hero-content">
+        <div>
+          <p class="eyebrow">ENTERPRISE ARCHITECTURE BRIEFING</p>
+          <h1>The Microsoft AI stack,<br><span>decoded for architects.</span></h1>
+          <p class="hero-copy">A focused signal across platform, orchestration, and end-user layers—translated into five-line architectural briefs.</p>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Function</th><th>Category</th><th>Subcategory</th><th>Subcategory Definition</th><th>Control</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-        <div class="pager">
-          <button id="prev">Prev</button>
-          <span id="pageMeta"></span>
-          <button id="next">Next</button>
+        <div class="sync-panel">
+          <p>FEED OPERATIONS</p>
+          <button id="syncButton" type="button">
+            <span class="sync-icon" aria-hidden="true">↻</span>
+            <span>Sync feeds</span>
+          </button>
+          <span id="syncStatus" role="status" aria-live="polite">Ready to synchronize</span>
         </div>
+      </div>
+      <div class="metrics" aria-label="Digest statistics">
+        <div><strong id="articleCount">0</strong><span>ARCHITECTURE BRIEFS</span></div>
+        <div><strong>5</strong><span>CURATED SOURCES</span></div>
+        <div><strong>3</strong><span>STACK LAYERS</span></div>
+      </div>
+    </header>
+
+    <main id="digest">
+      <div id="errorBanner" class="error-banner" role="alert" hidden></div>
+      <section class="layer" data-category="platform" aria-labelledby="platform-title">
+        <div class="layer-heading">
+          <div class="layer-number">01</div>
+          <div><p>FOUNDATION</p><h2 id="platform-title">Platform Layer</h2><span>Microsoft AI Foundry</span></div>
+          <div class="layer-line"></div><span class="layer-count" id="platform-count">0 BRIEFS</span>
+        </div>
+        <div class="article-grid" id="platform-list"></div>
       </section>
-    </section>
-  </main>
-</div>
-<script src="/app.js"></script>
+
+      <section class="layer" data-category="orchestration" aria-labelledby="orchestration-title">
+        <div class="layer-heading">
+          <div class="layer-number">02</div>
+          <div><p>AGENT &amp; WORKFLOW</p><h2 id="orchestration-title">Orchestration Layer</h2><span>Microsoft Copilot Studio</span></div>
+          <div class="layer-line"></div><span class="layer-count" id="orchestration-count">0 BRIEFS</span>
+        </div>
+        <div class="article-grid" id="orchestration-list"></div>
+      </section>
+
+      <section class="layer" data-category="end-user" aria-labelledby="end-user-title">
+        <div class="layer-heading">
+          <div class="layer-number">03</div>
+          <div><p>EXPERIENCE</p><h2 id="end-user-title">End-User Layer</h2><span>Microsoft 365 Copilot</span></div>
+          <div class="layer-line"></div><span class="layer-count" id="end-user-count">0 BRIEFS</span>
+        </div>
+        <div class="article-grid" id="end-user-list"></div>
+      </section>
+    </main>
+
+    <footer><span>MICROSOFT AI ARCHITECTURE DIGEST</span><span>Built for enterprise technology leaders</span></footer>
+  </div>
+  <template id="articleTemplate">
+    <article class="article-card">
+      <div class="card-meta"><time></time><span>5-LINE BRIEF</span></div>
+      <h3><a target="_blank" rel="noopener noreferrer"></a></h3>
+      <div class="summary"><div class="summary-label"><span>AI</span> ARCHITECTURE SUMMARY</div><p></p></div>
+      <a class="source-link" target="_blank" rel="noopener noreferrer">Read source <span>↗</span></a>
+    </article>
+  </template>
+  <script src="/assets/app.js" defer></script>
 </body>
 </html>
